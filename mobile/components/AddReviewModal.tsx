@@ -1,5 +1,5 @@
 // React Native AddReviewModal Component
-// Modal for submitting reviews
+// Modal for submitting reviews (toast validation visible ABOVE the modal)
 
 import React, { useState } from 'react';
 import {
@@ -12,12 +12,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { StarRating } from './StarRating';
 import { Button } from './Button';
 import { Colors, Spacing, FontSize, BorderRadius, FontWeight } from '../constants/theme';
+
+// ✅ IMPORTANT: We wrap the modal content with a nested ToastProvider
+// so toast renders in the same native layer as Modal (visible on top).
+import { ToastProvider, useToast } from '../context/ToastContext';
 
 interface AddReviewModalProps {
   visible: boolean;
@@ -26,26 +29,37 @@ interface AddReviewModalProps {
   onSubmit: (review: { userName: string; rating: number; comment: string }) => void;
 }
 
-export const AddReviewModal: React.FC<AddReviewModalProps> = ({
+const AddReviewModalInner: React.FC<AddReviewModalProps> = ({
   visible,
   onClose,
   productName,
   onSubmit,
 }) => {
   const colors = Colors.light;
+  const { showToast } = useToast();
+
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState('');
   const [userName, setUserName] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    // ❗ validation: show toast INSIDE modal layer
     if (rating === 0) {
-      Alert.alert('Rating required', 'Please select a star rating before submitting.');
+      showToast({
+        type: 'error',
+        title: 'Rating required',
+        message: 'Please select at least one star before submitting your review.',
+      });
       return;
     }
 
     if (comment.trim().length < 10) {
-      Alert.alert('Review too short', 'Please write at least 10 characters in your review.');
+      showToast({
+        type: 'error',
+        title: 'Review too short',
+        message: 'Your review must be at least 10 characters long.',
+      });
       return;
     }
 
@@ -54,9 +68,8 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
     // Simulate API call
     await new Promise((resolve) => setTimeout(resolve, 800));
 
+    // Success toast is handled by the parent screen (after modal closes)
     onSubmit({ userName: userName || 'Anonymous', rating, comment });
-
-    Alert.alert('Success', 'Thank you for sharing your feedback!');
 
     // Reset form
     setRating(0);
@@ -88,13 +101,10 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>
-                Write a Review
-              </Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
-                {productName}
-              </Text>
+              <Text style={[styles.title, { color: colors.foreground }]}>Write a Review</Text>
+              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{productName}</Text>
             </View>
+
             <TouchableOpacity
               onPress={handleClose}
               style={[styles.closeButton, { backgroundColor: colors.secondary }]}
@@ -107,27 +117,15 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
           <View style={styles.form}>
             {/* Rating */}
             <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>
-                Your Rating
-              </Text>
-              <StarRating
-                rating={rating}
-                size="lg"
-                interactive
-                onRatingChange={setRating}
-              />
+              <Text style={[styles.label, { color: colors.foreground }]}>Your Rating</Text>
+              <StarRating rating={rating} size="lg" interactive onRatingChange={setRating} />
             </View>
 
             {/* Name */}
             <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>
-                Your Name (optional)
-              </Text>
+              <Text style={[styles.label, { color: colors.foreground }]}>Your Name (optional)</Text>
               <TextInput
-                style={[
-                  styles.textInput,
-                  { backgroundColor: colors.secondary, color: colors.foreground },
-                ]}
+                style={[styles.textInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
                 value={userName}
                 onChangeText={setUserName}
                 placeholder="Enter your name"
@@ -137,14 +135,9 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
 
             {/* Comment */}
             <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>
-                Your Review
-              </Text>
+              <Text style={[styles.label, { color: colors.foreground }]}>Your Review</Text>
               <TextInput
-                style={[
-                  styles.textArea,
-                  { backgroundColor: colors.secondary, color: colors.foreground },
-                ]}
+                style={[styles.textArea, { backgroundColor: colors.secondary, color: colors.foreground }]}
                 value={comment}
                 onChangeText={setComment}
                 placeholder="Share your experience with this product..."
@@ -160,19 +153,10 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
 
             {/* Buttons */}
             <View style={styles.buttons}>
-              <Button
-                onPress={handleClose}
-                variant="outline"
-                style={styles.button}
-              >
+              <Button onPress={handleClose} variant="outline" style={styles.button}>
                 Cancel
               </Button>
-              <Button
-                onPress={handleSubmit}
-                variant="premium"
-                loading={isSubmitting}
-                style={styles.button}
-              >
+              <Button onPress={handleSubmit} variant="premium" loading={isSubmitting} style={styles.button}>
                 Submit Review
               </Button>
             </View>
@@ -183,11 +167,17 @@ export const AddReviewModal: React.FC<AddReviewModalProps> = ({
   );
 };
 
+export const AddReviewModal: React.FC<AddReviewModalProps> = (props) => {
+  // ✅ Nested provider so toast is visible on top of the Modal
+  return (
+    <ToastProvider>
+      <AddReviewModalInner {...props} />
+    </ToastProvider>
+  );
+};
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingTop: Spacing['3xl'],
-  },
+  container: { flex: 1, paddingTop: Spacing['3xl'] },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -200,9 +190,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.bold,
     marginBottom: Spacing.xs,
   },
-  subtitle: {
-    fontSize: FontSize.base,
-  },
+  subtitle: { fontSize: FontSize.base },
   closeButton: {
     width: 36,
     height: 36,
@@ -210,17 +198,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  form: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.xl,
-  },
-  field: {
-    gap: Spacing.sm,
-  },
-  label: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-  },
+  form: { paddingHorizontal: Spacing.lg, gap: Spacing.xl },
+  field: { gap: Spacing.sm },
+  label: { fontSize: FontSize.sm, fontWeight: FontWeight.medium },
   textInput: {
     height: 48,
     borderRadius: BorderRadius.lg,
@@ -234,17 +214,12 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.md,
     fontSize: FontSize.base,
   },
-  charCount: {
-    fontSize: FontSize.xs,
-    marginTop: Spacing.xs,
-  },
+  charCount: { fontSize: FontSize.xs, marginTop: Spacing.xs },
   buttons: {
     flexDirection: 'row',
     gap: Spacing.md,
     marginTop: Spacing.lg,
     paddingBottom: Spacing['3xl'],
   },
-  button: {
-    flex: 1,
-  },
+  button: { flex: 1 },
 });

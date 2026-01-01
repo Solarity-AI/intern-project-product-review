@@ -23,4 +23,5 @@ export interface Product {
 export type RootStackParamList = {
   ProductList: undefined;
   ProductDetails: { productId: string };
+  Notifications: undefined;
 };
