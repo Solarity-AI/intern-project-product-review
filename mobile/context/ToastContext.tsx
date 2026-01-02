@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Spacing, FontSize, FontWeight, BorderRadius, Shadow } from '../constants/theme';
+import { Colors, Spacing, FontSize, FontWeight, BorderRadius } from '../constants/theme';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -38,7 +38,6 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const hideToast = useCallback(() => {
-    // Clear any pending timeout
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -63,23 +62,19 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
   const showToast = useCallback(
     (toastConfig: ToastConfig) => {
-      // Clear any existing timeout to prevent race conditions
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
 
-      // Stop any running animations and reset values immediately
       translateY.stopAnimation();
       opacity.stopAnimation();
       translateY.setValue(-100);
       opacity.setValue(0);
 
-      // Set new config and make visible
       setConfig(toastConfig);
       setVisible(true);
 
-      // Start show animation
       Animated.parallel([
         Animated.spring(translateY, {
           toValue: 0,
@@ -94,11 +89,8 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }),
       ]).start();
 
-      // Schedule auto-hide
       const duration = toastConfig.duration ?? 3000;
-      timeoutRef.current = setTimeout(() => {
-        hideToast();
-      }, duration);
+      timeoutRef.current = setTimeout(() => hideToast(), duration);
     },
     [translateY, opacity, hideToast]
   );
@@ -108,8 +100,9 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       case 'success':
         return 'checkmark-circle';
       case 'error':
-        return 'alert-circle'; // ! icon for errors
+        return 'alert-circle';
       case 'info':
+      default:
         return 'information-circle';
     }
   };
@@ -121,6 +114,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       case 'error':
         return colors.destructive;
       case 'info':
+      default:
         return colors.primary;
     }
   };
@@ -132,6 +126,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       case 'error':
         return '#FEF2F2';
       case 'info':
+      default:
         return '#EFF6FF';
     }
   };
@@ -139,6 +134,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
+
       {visible && config && (
         <Animated.View
           pointerEvents="box-none"
@@ -192,9 +188,7 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
 export const useToast = () => {
   const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
+  if (!context) throw new Error('useToast must be used within a ToastProvider');
   return context;
 };
 
@@ -203,10 +197,16 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: Spacing.md,
     right: Spacing.md,
+
+    // Always on top
     zIndex: 99999,
-    
+
+    // ✅ CRITICAL for Android stacking
+    elevation: 99999,
+
     borderRadius: BorderRadius.lg,
-    ...Shadow.soft,
+
+    // iOS shadow (android uses elevation)
     ...Platform.select({
       ios: {
         shadowColor: '#000',
@@ -214,9 +214,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 12,
       },
-      android: {
-        elevation: 24,
-      },
+      android: {},
     }),
   },
   toastContent: {
@@ -233,7 +231,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   textContainer: { flex: 1 },
-  toastTitle: { fontSize: FontSize.sm, fontWeight: FontWeight.bold, marginBottom: 2 },
+  toastTitle: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.bold,
+    marginBottom: 2,
+  },
   toastMessage: { fontSize: FontSize.xs, lineHeight: 16 },
   closeButton: { padding: Spacing.xs },
 });

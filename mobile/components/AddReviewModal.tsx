@@ -1,5 +1,5 @@
 // React Native AddReviewModal Component
-// Modal for submitting reviews (toast validation visible ABOVE the modal)
+// Modal for submitting reviews (toast validation must be visible INSIDE the modal)
 
 import React, { useState } from 'react';
 import {
@@ -18,8 +18,7 @@ import { StarRating } from './StarRating';
 import { Button } from './Button';
 import { Colors, Spacing, FontSize, BorderRadius, FontWeight } from '../constants/theme';
 
-// ✅ IMPORTANT: We wrap the modal content with a nested ToastProvider
-// so toast renders in the same native layer as Modal (visible on top).
+// ✅ IMPORTANT: ToastProvider MUST be inside <Modal> to render in the same native layer.
 import { ToastProvider, useToast } from '../context/ToastContext';
 
 interface AddReviewModalProps {
@@ -29,8 +28,7 @@ interface AddReviewModalProps {
   onSubmit: (review: { userName: string; rating: number; comment: string }) => void;
 }
 
-const AddReviewModalInner: React.FC<AddReviewModalProps> = ({
-  visible,
+const AddReviewModalContent: React.FC<Omit<AddReviewModalProps, 'visible'>> = ({
   onClose,
   productName,
   onSubmit,
@@ -87,92 +85,97 @@ const AddReviewModalInner: React.FC<AddReviewModalProps> = ({
   };
 
   return (
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={[styles.container, { backgroundColor: colors.background }]}
+    >
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={[styles.title, { color: colors.foreground }]}>Write a Review</Text>
+            <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{productName}</Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={handleClose}
+            style={[styles.closeButton, { backgroundColor: colors.secondary }]}
+          >
+            <Ionicons name="close" size={20} color={colors.mutedForeground} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Form */}
+        <View style={styles.form}>
+          {/* Rating */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.foreground }]}>Your Rating</Text>
+            <StarRating rating={rating} size="lg" interactive onRatingChange={setRating} />
+          </View>
+
+          {/* Name */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.foreground }]}>Your Name (optional)</Text>
+            <TextInput
+              style={[styles.textInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
+              value={userName}
+              onChangeText={setUserName}
+              placeholder="Enter your name"
+              placeholderTextColor={colors.mutedForeground}
+            />
+          </View>
+
+          {/* Comment */}
+          <View style={styles.field}>
+            <Text style={[styles.label, { color: colors.foreground }]}>Your Review</Text>
+            <TextInput
+              style={[styles.textArea, { backgroundColor: colors.secondary, color: colors.foreground }]}
+              value={comment}
+              onChangeText={setComment}
+              placeholder="Share your experience with this product..."
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
+            <Text style={[styles.charCount, { color: colors.mutedForeground }]}>
+              Minimum 10 characters ({comment.length}/10)
+            </Text>
+          </View>
+
+          {/* Buttons */}
+          <View style={styles.buttons}>
+            <Button onPress={handleClose} variant="outline" style={styles.button}>
+              Cancel
+            </Button>
+            <Button onPress={handleSubmit} variant="premium" loading={isSubmitting} style={styles.button}>
+              Submit Review
+            </Button>
+          </View>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+};
+
+export const AddReviewModal: React.FC<AddReviewModalProps> = ({
+  visible,
+  onClose,
+  productName,
+  onSubmit,
+}) => {
+  // ✅ Provider INSIDE Modal = toast shows on the review screen (not behind it)
+  return (
     <Modal
       visible={visible}
       animationType="slide"
       presentationStyle="pageSheet"
-      onRequestClose={handleClose}
+      onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={[styles.container, { backgroundColor: colors.background }]}
-      >
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View>
-              <Text style={[styles.title, { color: colors.foreground }]}>Write a Review</Text>
-              <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>{productName}</Text>
-            </View>
-
-            <TouchableOpacity
-              onPress={handleClose}
-              style={[styles.closeButton, { backgroundColor: colors.secondary }]}
-            >
-              <Ionicons name="close" size={20} color={colors.mutedForeground} />
-            </TouchableOpacity>
-          </View>
-
-          {/* Form */}
-          <View style={styles.form}>
-            {/* Rating */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Your Rating</Text>
-              <StarRating rating={rating} size="lg" interactive onRatingChange={setRating} />
-            </View>
-
-            {/* Name */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Your Name (optional)</Text>
-              <TextInput
-                style={[styles.textInput, { backgroundColor: colors.secondary, color: colors.foreground }]}
-                value={userName}
-                onChangeText={setUserName}
-                placeholder="Enter your name"
-                placeholderTextColor={colors.mutedForeground}
-              />
-            </View>
-
-            {/* Comment */}
-            <View style={styles.field}>
-              <Text style={[styles.label, { color: colors.foreground }]}>Your Review</Text>
-              <TextInput
-                style={[styles.textArea, { backgroundColor: colors.secondary, color: colors.foreground }]}
-                value={comment}
-                onChangeText={setComment}
-                placeholder="Share your experience with this product..."
-                placeholderTextColor={colors.mutedForeground}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-              <Text style={[styles.charCount, { color: colors.mutedForeground }]}>
-                Minimum 10 characters ({comment.length}/10)
-              </Text>
-            </View>
-
-            {/* Buttons */}
-            <View style={styles.buttons}>
-              <Button onPress={handleClose} variant="outline" style={styles.button}>
-                Cancel
-              </Button>
-              <Button onPress={handleSubmit} variant="premium" loading={isSubmitting} style={styles.button}>
-                Submit Review
-              </Button>
-            </View>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      <ToastProvider>
+        <AddReviewModalContent onClose={onClose} productName={productName} onSubmit={onSubmit} />
+      </ToastProvider>
     </Modal>
-  );
-};
-
-export const AddReviewModal: React.FC<AddReviewModalProps> = (props) => {
-  // ✅ Nested provider so toast is visible on top of the Modal
-  return (
-    <ToastProvider>
-      <AddReviewModalInner {...props} />
-    </ToastProvider>
   );
 };
 

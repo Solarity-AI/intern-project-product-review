@@ -87,7 +87,7 @@ export const Shadow = {
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
     shadowRadius: 10,
-    elevation: 3,
+    
   },
   hover: {
     shadowColor: '#1C1917',

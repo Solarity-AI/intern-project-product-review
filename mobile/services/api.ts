@@ -1,4 +1,4 @@
-const BASE_URL = "http://10.249.128.215:8080"; 
+const BASE_URL = "http://10.11.90.214:8080"; 
 // telefonda tarayıcıda denediğin IP + :8080
 
 type Page<T> = {
