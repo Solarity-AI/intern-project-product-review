@@ -38,7 +38,7 @@ export const ScreenWrapper: React.FC<ScreenWrapperProps> = ({
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: bgColor }, paddingStyle, style]}>
+    <View style={[styles.container, { backgroundColor: Colors.light.background }, paddingStyle, style]}>
       <StatusBar
         barStyle={statusBarStyle}
         backgroundColor={bgColor}
