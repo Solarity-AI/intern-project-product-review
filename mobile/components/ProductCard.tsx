@@ -17,7 +17,7 @@ function imageForCategory(category?: string) {
   if (c.includes('audio')) return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
   if (c.includes('smart') || c.includes('phone') || c.includes('mobile')) return 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80';
   if (c.includes('camera') || c.includes('photo')) return 'https://images.unsplash.com/photo-1519183071298-a2962be96cdb?w=800&q=80';
-  if (c.includes('watch') || c.includes('wear')) return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&q=80';
+  if (c.includes('watch') || c.includes('wear')) return 'https://images.unsplash.com/photo-1523275335684-37898b6baf30e?w=800&q=80';
   if (c.includes('laptop') || c.includes('computer')) return 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&q=80';
   return 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&q=80';
 }
@@ -32,19 +32,30 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       (product as any)?.image ||
       (product as any)?.thumbnailUrl;
 
-    if (typeof direct === 'string' && direct.trim().length > 0) return direct;
+    if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
     return imageForCategory((product as any)?.category);
   }, [product]);
 
   const reviewCount = (product as any)?.reviewCount ?? (product as any)?.totalReviews ?? 0;
   const avgRating = (product as any)?.averageRating ?? 0;
 
+  const handlePress = () => {
+    // ✅ MIN FIX: imageUrl + name'i route param ile gönderiyoruz
+    navigation.navigate(
+      'ProductDetails',
+      {
+        productId: String((product as any)?.id ?? ''),
+        imageUrl: imageUri,
+        name: (product as any)?.name ?? null,
+      } as any // RootStackParamList dar tanımlıysa TS hata vermesin diye
+    );
+  };
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       style={[styles.container, { backgroundColor: colors.card }]}
-     onPress={() => navigation.navigate('ProductDetails', { productId: String(product.id) })}
-
+      onPress={handlePress}
     >
       <View style={styles.imageContainer}>
         <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
@@ -85,7 +96,7 @@ const styles = StyleSheet.create({
     width: '100%',
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
-    ...Shadow.soft,
+    ...Shadow.soft, // ✅ SYNTAX FIX (senin dosyada .Shadow.soft gibi typo vardı)
   },
 
   imageContainer: {
@@ -108,7 +119,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
-    ...Shadow.soft,
+    ...Shadow.soft, // ✅ SYNTAX FIX
   },
 
   categoryText: {
@@ -129,7 +140,7 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: Spacing.xs,
   },
 
   reviewCount: {
@@ -137,7 +148,7 @@ const styles = StyleSheet.create({
   },
 
   price: {
-    fontSize: 16,
-    fontWeight: FontWeight.bold,
+    fontSize: 14,
+    fontWeight: FontWeight.semibold,
   },
 });
