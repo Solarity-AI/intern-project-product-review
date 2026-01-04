@@ -1,5 +1,5 @@
-// const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com"; 
-const BASE_URL = "http://192.168.1.6:8080";
+const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com"; 
+// const BASE_URL = "http://192.168.1.6:8080";
 
 export type Page<T> = {
   content: T[];
