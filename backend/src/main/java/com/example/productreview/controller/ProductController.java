@@ -20,8 +20,10 @@ public class ProductController {
     private final ProductService productService;
 
     @GetMapping
-    public Page<ProductDTO> getAllProducts(@PageableDefault(size = 10) Pageable pageable) {
-        return productService.getAllProducts(pageable);
+    public Page<ProductDTO> getAllProducts(
+            @RequestParam(required = false) String category,
+            @PageableDefault(size = 10) Pageable pageable) {
+        return productService.getAllProducts(category, pageable);
     }
 
     @GetMapping("/{id}")
@@ -30,8 +32,11 @@ public class ProductController {
     }
 
     @GetMapping("/{id}/reviews")
-    public List<ReviewDTO> getReviewsByProductId(@PathVariable Long id) {
-        return productService.getReviewsByProductId(id);
+    public Page<ReviewDTO> getReviewsByProductId(
+            @PathVariable Long id,
+            @RequestParam(required = false) Integer rating,
+            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable) {
+        return productService.getReviewsByProductId(id, rating, pageable);
     }
 
     @PostMapping("/{id}/reviews")
