@@ -7,32 +7,54 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Colors, Spacing, FontSize, BorderRadius, FontWeight } from '../constants/theme';
 
 interface RatingBreakdownProps {
-  reviews: { rating: number }[];
+  // Option 1: Use pre-calculated breakdown from backend
+  breakdown?: Record<number, number>;
+  totalCount?: number;
 
-  // ✅ NEW: optional click-to-filter
+  // Option 2: Calculate from reviews list (legacy/fallback)
+  reviews?: { rating: number }[];
+
+  // Click-to-filter
   selectedRating?: number | null;
   onSelectRating?: (rating: number | null) => void; // null => clear
 }
 
 export const RatingBreakdown: React.FC<RatingBreakdownProps> = ({
+  breakdown,
+  totalCount,
   reviews,
   selectedRating = null,
   onSelectRating,
 }) => {
   const colors = Colors.light;
-  const totalReviews = reviews.length;
 
-  const ratingCounts = useMemo(() => {
-    return [5, 4, 3, 2, 1].map((rating) => ({
-      rating,
-      count: reviews.filter((r) => Math.floor(r.rating) === rating).length,
-    }));
-  }, [reviews]);
+  const data = useMemo(() => {
+    // If backend provides breakdown, use it
+    if (breakdown) {
+      const total = totalCount ?? Object.values(breakdown).reduce((a, b) => a + b, 0);
+      return {
+        counts: [5, 4, 3, 2, 1].map(r => ({ rating: r, count: breakdown[r] || 0 })),
+        total
+      };
+    }
+    
+    // Fallback: calculate from reviews list
+    const list = reviews || [];
+    return {
+      counts: [5, 4, 3, 2, 1].map((rating) => ({
+        rating,
+        count: list.filter((r) => Math.floor(r.rating) === rating).length,
+      })),
+      total: list.length
+    };
+  }, [breakdown, totalCount, reviews]);
+
+  const { counts, total } = data;
 
   return (
     <View style={styles.container}>
-      {ratingCounts.map(({ rating, count }) => {
-        const percent = totalReviews === 0 ? 0 : (count / totalReviews) * 100;
+      {counts.map(({ rating, count }) => {
+        const percent = total === 0 ? 0 : (count / total) * 100;
         const isSelected = selectedRating === rating;
 
         return (
@@ -60,7 +82,7 @@ export const RatingBreakdown: React.FC<RatingBreakdownProps> = ({
                 end={{ x: 1, y: 0 }}
                 style={[
                   styles.barFill,
-                  { width: `${percent}%`, opacity: totalReviews === 0 ? 0.3 : 1 },
+                  { width: `${percent}%`, opacity: total === 0 ? 0.3 : 1 },
                 ]}
               />
             </View>

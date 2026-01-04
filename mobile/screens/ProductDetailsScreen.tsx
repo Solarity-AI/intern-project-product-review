@@ -1,5 +1,5 @@
 // React Native ProductDetailsScreen
-// Rating breakdown click-to-filter + helpful + review submit refresh + robust image fallback
+// Rating breakdown click-to-filter + helpful + review submit refresh + robust image fallback + Pagination + Server-side Filtering
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
@@ -106,8 +106,6 @@ function normalizeImageUri(uri: string | null): string | null {
   if (u.startsWith('http://') || u.startsWith('https://')) return u;
   if (u.startsWith('//')) return `https:${u}`;
 
-  // Eğer backend relative dönse bile, burada sadece güvenli kalsın diye bırakıyoruz.
-  // İstersen api.ts'ten BASE_URL export edip burada birleştiririz.
   return u;
 }
 
@@ -118,8 +116,6 @@ export const ProductDetailsScreen: React.FC = () => {
   const colors = Colors.light;
 
   const productId = String((route.params as any)?.productId ?? (route.params as any)?.id ?? '');
-
-  // ✅ Listeden gelen fallback image (backend detail’de image yoksa buradan göster)
   const routeImageUrl = String((route.params as any)?.imageUrl ?? '');
   const routeName = String((route.params as any)?.name ?? '');
 
@@ -128,14 +124,16 @@ export const ProductDetailsScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Pagination states
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [helpfulReviews, setHelpfulReviews] = useState<string[]>([]);
   const [selectedRating, setSelectedRating] = useState<number | null>(null);
-
-  // image fallback
   const [imageFailed, setImageFailed] = useState(false);
 
-  // Load helpful ids
   useEffect(() => {
     (async () => {
       try {
@@ -151,74 +149,91 @@ export const ProductDetailsScreen: React.FC = () => {
     } catch {}
   }, []);
 
-  const fetchAll = useCallback(async () => {
+  // Fetch product and initial reviews (with optional rating filter)
+  const fetchProductAndReviews = useCallback(async (resetReviews = false) => {
     try {
-      setLoading(true);
+      if (resetReviews) {
+        setLoading(true);
+        setReviews([]);
+      }
+      
       setError(null);
+      setPage(0);
+      setHasMore(true);
 
-      const [p, rev] = await Promise.all([getProduct(productId), getReviews(productId)]);
+      // If we already have product, don't fetch it again unless necessary
+      const productPromise = product ? Promise.resolve(product) : getProduct(productId);
+      
+      const [p, revPage] = await Promise.all([
+        productPromise,
+        getReviews(productId, { page: 0, size: 5, rating: selectedRating })
+      ]);
+      
       setProduct(p);
-      setReviews((rev ?? []).map((r) => apiReviewToUiReview(productId, r)));
+      
+      const newReviews = (revPage.content ?? []).map((r) => apiReviewToUiReview(productId, r));
+      setReviews(newReviews);
+      setHasMore(!revPage.last);
+      
     } catch (e: any) {
       setError(e?.message ?? 'API error');
     } finally {
       setLoading(false);
     }
-  }, [productId]);
+  }, [productId, selectedRating, product]);
 
+  // Initial load
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    fetchProductAndReviews(true);
+  }, [productId]); // Only on mount or productId change
 
-  // ekrana geri gelince güncelle
-  useFocusEffect(
-    useCallback(() => {
-      fetchAll();
-    }, [fetchAll])
-  );
+  // When rating filter changes, re-fetch reviews
+  useEffect(() => {
+    // Skip initial mount to avoid double fetch
+    if (!loading) {
+      fetchProductAndReviews(false);
+    }
+  }, [selectedRating]);
+
+  const loadMoreReviews = async () => {
+    if (!hasMore || loadingMore) return;
+    
+    try {
+      setLoadingMore(true);
+      const nextPage = page + 1;
+      const revPage = await getReviews(productId, { page: nextPage, size: 5, rating: selectedRating });
+      
+      const newReviews = (revPage.content ?? []).map((r) => apiReviewToUiReview(productId, r));
+      setReviews(prev => [...prev, ...newReviews]);
+      
+      setPage(nextPage);
+      setHasMore(!revPage.last);
+    } catch (e) {
+      // silent fail or toast
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const avgRating = useMemo(() => {
+    if (product?.averageRating) return product.averageRating;
     if (!reviews.length) return 0;
     return reviews.reduce((acc, r) => acc + (r.rating ?? 0), 0) / reviews.length;
-  }, [reviews]);
+  }, [reviews, product]);
 
-  const filteredReviews = useMemo(() => {
-    if (selectedRating === null) return reviews;
-    return reviews.filter((r) => Math.floor(r.rating) === selectedRating);
-  }, [reviews, selectedRating]);
-
-  // ✅ Önce product'tan dene, yoksa route param imageUrl
   const imageUri = useMemo(() => {
     const fromProduct = product ? pickImageUri(product) : null;
     const fallback = routeImageUrl && routeImageUrl.trim().length > 0 ? routeImageUrl.trim() : null;
     return normalizeImageUri(fromProduct ?? fallback);
   }, [product, routeImageUrl]);
 
-  // ✅ uri değişince fail reset
   useEffect(() => {
     setImageFailed(false);
   }, [imageUri]);
 
-  // ✅ Loglar doğru yerde (DEV + spam yok)
-  useEffect(() => {
-    if (!__DEV__) return;
-    if (!product) return;
-
-    console.log('DETAIL product image fields:', {
-      image: (product as any)?.image,
-      imageUrl: (product as any)?.imageUrl,
-      image_url: (product as any)?.image_url,
-      images: (product as any)?.images,
-      routeImageUrl,
-    });
-
-    console.log('DETAIL resolved imageUri:', imageUri);
-  }, [product, imageUri, routeImageUrl]);
-
   const handleHelpfulPress = async (reviewId: string) => {
     if (helpfulReviews.includes(reviewId)) return;
 
-    // optimistic
     setReviews((prev) =>
       prev.map((r) => (r.id === reviewId ? { ...r, helpful: (r.helpful ?? 0) + 1 } : r))
     );
@@ -242,7 +257,9 @@ export const ProductDetailsScreen: React.FC = () => {
 
       showToast({ type: 'success', title: 'Review added', message: 'Thanks for your feedback!' });
 
-      await fetchAll();
+      // Refresh list
+      setSelectedRating(null); // Reset filter to show new review
+      await fetchProductAndReviews(false);
       setIsReviewModalOpen(false);
     } catch (e: any) {
       showToast({
@@ -253,7 +270,7 @@ export const ProductDetailsScreen: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !product) {
     return (
       <ScreenWrapper>
         <View style={styles.center}>
@@ -264,8 +281,7 @@ export const ProductDetailsScreen: React.FC = () => {
     );
   }
 
-  // product null olsa bile, routeName ile en azından bir şey gösterebiliriz
-  if (error) {
+  if (error && !product) {
     return (
       <ScreenWrapper>
         <View style={styles.center}>
@@ -295,7 +311,6 @@ export const ProductDetailsScreen: React.FC = () => {
                 style={styles.image}
                 resizeMode="cover"
                 onError={(e) => {
-                  if (__DEV__) console.log('DETAIL image onError:', e?.nativeEvent);
                   setImageFailed(true);
                 }}
               />
@@ -321,7 +336,7 @@ export const ProductDetailsScreen: React.FC = () => {
           <View style={styles.ratingRow}>
             <StarRating rating={avgRating} size="md" />
             <Text style={[styles.ratingMeta, { color: colors.mutedForeground }]}>
-              {avgRating.toFixed(1)} ({reviews.length} reviews)
+              {avgRating.toFixed(1)} ({product?.reviewCount ?? reviews.length} reviews)
             </Text>
           </View>
 
@@ -349,6 +364,8 @@ export const ProductDetailsScreen: React.FC = () => {
             </View>
 
             <RatingBreakdown
+              breakdown={(product as any)?.ratingBreakdown}
+              totalCount={(product as any)?.reviewCount}
               reviews={reviews}
               selectedRating={selectedRating}
               onSelectRating={setSelectedRating}
@@ -367,11 +384,11 @@ export const ProductDetailsScreen: React.FC = () => {
               </Button>
             </View>
 
-            {filteredReviews.length === 0 ? (
+            {reviews.length === 0 ? (
               <Text style={{ color: colors.mutedForeground, marginTop: 8 }}>No reviews found.</Text>
             ) : (
               <View style={{ marginTop: Spacing.md, gap: Spacing.md }}>
-                {filteredReviews.map((r) => (
+                {reviews.map((r) => (
                   <ReviewCard
                     key={r.id}
                     review={r}
@@ -380,6 +397,23 @@ export const ProductDetailsScreen: React.FC = () => {
                   />
                 ))}
               </View>
+            )}
+            
+            {/* Load More Button */}
+            {hasMore && (
+              <TouchableOpacity 
+                style={styles.loadMoreButton} 
+                onPress={loadMoreReviews}
+                disabled={loadingMore}
+              >
+                {loadingMore ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text style={{ color: colors.primary, fontWeight: FontWeight.medium }}>
+                    Load More Reviews
+                  </Text>
+                )}
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -439,7 +473,7 @@ const styles = StyleSheet.create({
 
   description: { fontSize: FontSize.base, lineHeight: 20 },
 
-  section: { gap: Spacing.md, marginTop: Spacing.lg },
+  section: { gap: Spacing.md, marginTop: Spacing.lg, marginBottom: Spacing.xl },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -462,4 +496,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: Spacing.md,
   },
+  
+  loadMoreButton: {
+    padding: Spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  }
 });
