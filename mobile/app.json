@@ -27,13 +27,14 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "877d95dc-5a55-429d-888a-65e1ef31efb3"
-      }
-    },
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "0e12a84c-3f7b-4617-aef1-39af888710d1"
+      }
+    },
+    "owner": "erencandonertas"
   }
 }

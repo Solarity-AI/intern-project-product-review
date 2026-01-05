@@ -167,7 +167,9 @@ export const ProductListScreen: React.FC = () => {
         <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Explore Products</Text>
       </View>
 
-      <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={setSelectedCategory} />
+      <View style={styles.categoryFilterWrapper}>
+        <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={setSelectedCategory} />
+      </View>
 
       {loading && <ActivityIndicator style={{ marginTop: 16 }} />}
       {error && <Text style={{ color: colors.destructive, padding: Spacing.lg }}>{error}</Text>}
@@ -196,11 +198,13 @@ export const ProductListScreen: React.FC = () => {
           isWeb && styles.webMaxWidth,
         ]}
         columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
+        ItemSeparatorComponent={numColumns === 1 ? () => <View style={{ height: Spacing.md }} /> : undefined}
         renderItem={({ item }) => (
           <View
             style={[
               numColumns > 1 && styles.gridItem,
               numColumns > 1 && { width: `${100 / numColumns}%` },
+              numColumns === 1 && { paddingHorizontal: Spacing.lg },
             ]}
           >
             <ProductCard product={item} />
@@ -297,8 +301,12 @@ const styles = StyleSheet.create({
 
   searchSection: { paddingVertical: Spacing.lg },
 
-  sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.md },
+  sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm },
   sectionTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold },
+
+  categoryFilterWrapper: {
+    marginBottom: Spacing.lg,
+  },
 
   listContent: {
     paddingBottom: Spacing['3xl'],
@@ -307,8 +315,8 @@ const styles = StyleSheet.create({
 
   columnWrapper: {
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.lg,
-    marginTop: Spacing.lg,
+    gap: Spacing.md,
+    marginTop: Spacing.xl,
   },
 
   gridItem: {
