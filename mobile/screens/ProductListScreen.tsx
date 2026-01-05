@@ -21,6 +21,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { ProductCard } from '../components/ProductCard';
 import { CategoryFilter } from '../components/CategoryFilter';
+import { SortFilter } from '../components/SortFilter';
 import { SearchBar } from '../components/SearchBar';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -37,8 +38,8 @@ export const ProductListScreen: React.FC = () => {
 
   const numColumns =
     width >= 1200 ? 4 :
-      width >= 900 ? 3 :
-        width >= 600 ? 2 : 1;
+    width >= 900 ? 3 :
+    width >= 600 ? 2 : 1;
 
   const [apiProducts, setApiProducts] = useState<ApiProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,11 +53,13 @@ export const ProductListScreen: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('name,asc'); // Sort state
 
   // Fetch products from backend with category filter and pagination
   const fetchProducts = useCallback(async (pageNum: number = 0, append: boolean = false) => {
-    console.log('🚀 Fetching page:', pageNum, 'Append:', append); // ← EKLE
     try {
+      console.log('🚀 Fetching page:', pageNum, 'Append mode:', append);
+      
       if (!append) {
         setLoading(true);
       } else {
@@ -64,51 +67,63 @@ export const ProductListScreen: React.FC = () => {
       }
       setError(null);
 
-      // Pass selectedCategory to backend
-      const page = await getProducts({
-        page: pageNum,
+      // Pass selectedCategory and sort to backend
+      const page = await getProducts({ 
+        page: pageNum, 
         size: 20, // Reduced from 50 for better pagination
-        sort: 'name,asc',
-        category: selectedCategory
+        sort: sortBy,
+        category: selectedCategory 
       });
-      console.log('📦 Received products:', page.content.length); // ← EKLE
-      console.log('📄 Total pages:', page.totalPages); // ← EKLE
-      console.log('🔚 Is last page?', page.last); // ← EKLE
-
+      
+      console.log('📦 Received products:', page?.content?.length);
+      console.log('📄 Total pages:', page?.totalPages);
+      console.log('🔚 Is last page?', page?.last);
+      console.log('📊 Current total products in list:', apiProducts.length + (page?.content?.length ?? 0));
+      
       const newProducts = page?.content ?? [];
-
+      
       if (append) {
-        setApiProducts(prev => [...prev, ...newProducts]);
+        setApiProducts(prev => {
+          console.log('➕ Appending to existing list. Old:', prev.length, 'New:', newProducts.length);
+          return [...prev, ...newProducts];
+        });
       } else {
+        console.log('🔄 Replacing list with', newProducts.length, 'products');
         setApiProducts(newProducts);
       }
-
+      
       setCurrentPage(pageNum);
       setTotalPages(page?.totalPages ?? 0);
       setHasMore(!page?.last);
-
+      
     } catch (e: any) {
+      console.error('❌ Error fetching products:', e?.message);
       setError(e?.message ?? 'API error');
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, sortBy, apiProducts.length]);
 
   useEffect(() => {
     fetchProducts(0, false);
-  }, [selectedCategory]); // Reset to page 0 when category changes
+  }, [selectedCategory, sortBy]); // Reset to page 0 when category or sort changes
 
   useFocusEffect(
     useCallback(() => {
       fetchProducts(0, false);
-    }, [selectedCategory])
+    }, [selectedCategory, sortBy])
   );
 
   // Load more products (infinite scroll)
   const loadMoreProducts = useCallback(() => {
+    console.log('📜 Scroll trigger - loadingMore:', loadingMore, 'hasMore:', hasMore, 'loading:', loading);
+    
     if (!loadingMore && hasMore && !loading) {
+      console.log('✅ Loading next page:', currentPage + 1);
       fetchProducts(currentPage + 1, true);
+    } else {
+      console.log('⏸️  Load more blocked:', { loadingMore, hasMore, loading });
     }
   }, [loadingMore, hasMore, loading, currentPage, fetchProducts]);
 
@@ -205,6 +220,11 @@ export const ProductListScreen: React.FC = () => {
         <CategoryFilter selectedCategory={selectedCategory} onCategoryChange={setSelectedCategory} />
       </View>
 
+      <View style={styles.sortFilterWrapper}>
+        <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Sort by:</Text>
+        <SortFilter selectedSort={sortBy} onSortChange={setSortBy} />
+      </View>
+
       {loading && <ActivityIndicator style={{ marginTop: 16 }} />}
       {error && <Text style={{ color: colors.destructive, padding: Spacing.lg }}>{error}</Text>}
     </View>
@@ -215,6 +235,7 @@ export const ProductListScreen: React.FC = () => {
     stats,
     searchQuery,
     selectedCategory,
+    sortBy,
     loading,
     error,
   ]);
@@ -247,7 +268,8 @@ export const ProductListScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="none"
-
+        
+        
         onEndReached={loadMoreProducts}
         onEndReachedThreshold={0.5}
         ListFooterComponent={
@@ -260,6 +282,7 @@ export const ProductListScreen: React.FC = () => {
             </View>
           ) : null
         }
+        
         ListEmptyComponent={
           !loading ? (
             <View style={{ padding: Spacing.xl }}>
@@ -353,6 +376,17 @@ const styles = StyleSheet.create({
 
   categoryFilterWrapper: {
     marginBottom: Spacing.lg,
+  },
+
+  sortFilterWrapper: {
+    marginBottom: Spacing.lg,
+  },
+
+  filterLabel: {
+    fontSize: FontSize.sm,
+    fontWeight: FontWeight.medium,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xs,
   },
 
   listContent: {
