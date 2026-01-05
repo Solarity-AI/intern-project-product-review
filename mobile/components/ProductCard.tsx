@@ -2,11 +2,13 @@ import React, { useMemo } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Ionicons } from '@expo/vector-icons';
 
 import { StarRating } from './StarRating';
 import { RootStackParamList } from '../types';
 import { Colors, Spacing, BorderRadius, Shadow, FontWeight } from '../constants/theme';
 import { ApiProduct } from '../services/api';
+import { useWishlist } from '../context/WishlistContext';
 
 interface ProductCardProps {
   product: ApiProduct;
@@ -25,6 +27,10 @@ function imageForCategory(category?: string) {
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const colors = Colors.light;
+  const { isInWishlist, toggleWishlist } = useWishlist();
+
+  const productId = String((product as any)?.id ?? '');
+  const inWishlist = isInWishlist(productId);
 
   const imageUri = useMemo(() => {
     const direct =
@@ -51,6 +57,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     );
   };
 
+  const handleWishlistToggle = (e: any) => {
+    e.stopPropagation(); // Prevent card press
+    toggleWishlist({
+      id: productId,
+      name: (product as any)?.name ?? 'Product',
+      price: (product as any)?.price,
+      imageUrl: imageUri,
+      category: (product as any)?.category,
+      averageRating: avgRating,
+    });
+  };
+
   return (
     <TouchableOpacity
       activeOpacity={0.9}
@@ -59,6 +77,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     >
       <View style={styles.imageContainer}>
         <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
+
+        {/* Wishlist button */}
+        <TouchableOpacity
+          style={[styles.wishlistButton, { backgroundColor: inWishlist ? colors.primary : 'rgba(255,255,255,0.9)' }]}
+          onPress={handleWishlistToggle}
+          activeOpacity={0.8}
+        >
+          <Ionicons
+            name={inWishlist ? 'heart' : 'heart-outline'}
+            size={20}
+            color={inWishlist ? '#fff' : colors.foreground}
+          />
+        </TouchableOpacity>
 
         {!!(product as any)?.category && (
           <View style={[styles.categoryBadge, { backgroundColor: colors.secondary }]}>
@@ -109,6 +140,18 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%',
+  },
+
+  wishlistButton: {
+    position: 'absolute',
+    top: Spacing.md,
+    right: Spacing.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Shadow.soft,
   },
 
   categoryBadge: {

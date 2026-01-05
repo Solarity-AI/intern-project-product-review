@@ -11,6 +11,7 @@ export type RootStackParamList = {
   NotificationDetail: {
     notificationId: string;
   };
+  Wishlist: undefined;
 };
 
 export interface Review {

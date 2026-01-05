@@ -24,6 +24,7 @@ import { CategoryFilter } from '../components/CategoryFilter';
 import { SortFilter } from '../components/SortFilter';
 import { SearchBar } from '../components/SearchBar';
 import { useNotifications } from '../context/NotificationContext';
+import { useWishlist } from '../context/WishlistContext';
 
 import { RootStackParamList } from '../types';
 import { Colors, Spacing, FontSize, FontWeight, BorderRadius } from '../constants/theme';
@@ -32,6 +33,7 @@ export const ProductListScreen: React.FC = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const colors = Colors.light;
   const { unreadCount } = useNotifications();
+  const { wishlistCount } = useWishlist();
 
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
@@ -162,7 +164,7 @@ export const ProductListScreen: React.FC = () => {
 
   const header = useMemo(() => (
     <View>
-      <View style={styles.topBar}>
+            <View style={styles.topBar}>
         <View style={styles.logoContainer}>
           <LinearGradient colors={[colors.primary, colors.accent]} style={styles.logoIcon}>
             <Ionicons name="star" size={16} color={colors.primaryForeground} />
@@ -170,19 +172,35 @@ export const ProductListScreen: React.FC = () => {
           <Text style={[styles.logoText, { color: colors.foreground }]}>ProductReview</Text>
         </View>
 
-        <TouchableOpacity
-          style={styles.notificationButton}
-          onPress={() => navigation.navigate('Notifications')}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="notifications-outline" size={22} color={colors.foreground} />
-          {unreadCount > 0 && (
-            <View style={[styles.badge, { backgroundColor: colors.destructive }]}>
-              <Text style={styles.badgeText}>{unreadCount}</Text>
-            </View>
-          )}
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.wishlistButton}
+            onPress={() => navigation.navigate('Wishlist')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="heart-outline" size={22} color={colors.foreground} />
+            {wishlistCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+                <Text style={styles.badgeText}>{wishlistCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={() => navigation.navigate('Notifications')}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="notifications-outline" size={22} color={colors.foreground} />
+            {unreadCount > 0 && (
+              <View style={[styles.badge, { backgroundColor: colors.destructive }]}>
+                <Text style={styles.badgeText}>{unreadCount}</Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
+
 
       <View style={[styles.heroSection, { backgroundColor: colors.secondary }]}>
         <Text style={[styles.heroTitle, { color: colors.foreground }]}>
@@ -232,6 +250,7 @@ export const ProductListScreen: React.FC = () => {
     colors,
     navigation,
     unreadCount,
+    wishlistCount,
     stats,
     searchQuery,
     selectedCategory,
@@ -315,6 +334,17 @@ const styles = StyleSheet.create({
   },
 
   logoText: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+
+  wishlistButton: { 
+    position: 'relative', 
+    padding: Spacing.xs,
+  },
 
   notificationButton: { position: 'relative', padding: Spacing.xs },
 
