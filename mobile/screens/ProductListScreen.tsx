@@ -1,4 +1,4 @@
-// React Native ProductListScreen with Server-side Filtering + Dark Mode Toggle
+// React Native ProductListScreen with Server-side Filtering + Dark Mode Toggle + Grid Layout Toggle
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getProducts, ApiProduct } from '../services/api';
 
@@ -39,10 +39,10 @@ export const ProductListScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
 
-  const numColumns =
-    width >= 1200 ? 4 :
-    width >= 900 ? 3 :
-    width >= 600 ? 2 : 1;
+  // Grid mode: 1, 2, 4 columns (cycles)
+  const [gridMode, setGridMode] = useState<1 | 2 | 4>(2);
+  
+  const numColumns = gridMode;
 
   const [apiProducts, setApiProducts] = useState<ApiProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,13 +56,26 @@ export const ProductListScreen: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('name,asc'); // Sort state
+  const [sortBy, setSortBy] = useState('name,asc');
 
-  // Fetch products from backend with category filter and pagination
+  // Toggle grid: 1 → 2 → 4 → 1
+  const toggleGridMode = () => {
+    setGridMode(prev => {
+      if (prev === 1) return 2;
+      if (prev === 2) return 4;
+      return 1;
+    });
+  };
+
+  // Get icon for current grid mode
+  const getGridIcon = (): keyof typeof Ionicons.glyphMap => {
+    if (gridMode === 1) return 'list';
+    if (gridMode === 2) return 'grid';
+    return 'apps'; // 4 columns
+  };
+
   const fetchProducts = useCallback(async (pageNum: number = 0, append: boolean = false) => {
     try {
-      console.log('🚀 Fetching page:', pageNum, 'Append mode:', append);
-      
       if (!append) {
         setLoading(true);
       } else {
@@ -70,28 +83,18 @@ export const ProductListScreen: React.FC = () => {
       }
       setError(null);
 
-      // Pass selectedCategory and sort to backend
       const page = await getProducts({ 
         page: pageNum, 
-        size: 20, // Reduced from 50 for better pagination
+        size: 20,
         sort: sortBy,
         category: selectedCategory 
       });
       
-      console.log('📦 Received products:', page?.content?.length);
-      console.log('📄 Total pages:', page?.totalPages);
-      console.log('📚 Is last page?', page?.last);
-      console.log('📊 Current total products in list:', apiProducts.length + (page?.content?.length ?? 0));
-      
       const newProducts = page?.content ?? [];
       
       if (append) {
-        setApiProducts(prev => {
-          console.log('➕ Appending to existing list. Old:', prev.length, 'New:', newProducts.length);
-          return [...prev, ...newProducts];
-        });
+        setApiProducts(prev => [...prev, ...newProducts]);
       } else {
-        console.log('🔄 Replacing list with', newProducts.length, 'products');
         setApiProducts(newProducts);
       }
       
@@ -100,17 +103,16 @@ export const ProductListScreen: React.FC = () => {
       setHasMore(!page?.last);
       
     } catch (e: any) {
-      console.error('❌ Error fetching products:', e?.message);
       setError(e?.message ?? 'API error');
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [selectedCategory, sortBy, apiProducts.length]);
+  }, [selectedCategory, sortBy]);
 
   useEffect(() => {
     fetchProducts(0, false);
-  }, [selectedCategory, sortBy]); // Reset to page 0 when category or sort changes
+  }, [selectedCategory, sortBy]);
 
   useFocusEffect(
     useCallback(() => {
@@ -118,19 +120,12 @@ export const ProductListScreen: React.FC = () => {
     }, [selectedCategory, sortBy])
   );
 
-  // Load more products (infinite scroll)
   const loadMoreProducts = useCallback(() => {
-    console.log('📜 Scroll trigger - loadingMore:', loadingMore, 'hasMore:', hasMore, 'loading:', loading);
-    
     if (!loadingMore && hasMore && !loading) {
-      console.log('✅ Loading next page:', currentPage + 1);
       fetchProducts(currentPage + 1, true);
-    } else {
-      console.log('⏸️ Load more blocked:', { loadingMore, hasMore, loading });
     }
   }, [loadingMore, hasMore, loading, currentPage, fetchProducts]);
 
-  // Client-side filtering only for search query
   const filteredProducts = useMemo(() => {
     let filtered = apiProducts;
 
@@ -252,7 +247,19 @@ export const ProductListScreen: React.FC = () => {
       </View>
 
       <View style={styles.sortFilterWrapper}>
-        <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Sort by:</Text>
+        <View style={styles.sortHeader}>
+          <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Sort by:</Text>
+          
+          {/* Grid Toggle Button */}
+          <TouchableOpacity
+            onPress={toggleGridMode}
+            style={[styles.gridToggleButton, { backgroundColor: colors.secondary }]}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={getGridIcon()} size={20} color={colors.foreground} />
+          </TouchableOpacity>
+        </View>
+        
         <SortFilter selectedSort={sortBy} onSortChange={setSortBy} />
       </View>
 
@@ -272,6 +279,7 @@ export const ProductListScreen: React.FC = () => {
     sortBy,
     loading,
     error,
+    gridMode,
   ]);
 
   return (
@@ -435,11 +443,26 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.lg,
   },
 
+  // YENİ: Grid toggle için
+  sortHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.xs,
+  },
+
   filterLabel: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
-    paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xs,
+  },
+
+  gridToggleButton: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   listContent: {
