@@ -1,5 +1,5 @@
-const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com"; 
-// const BASE_URL = "http://192.168.1.6:8080";
+// const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com"; 
+const BASE_URL = "http://192.168.1.6:8080";
 
 export type Page<T> = {
   content: T[];
@@ -19,6 +19,8 @@ export type ApiProduct = {
   averageRating?: number;
   reviewCount?: number;
   ratingBreakdown?: Record<number, number>;
+  imageUrl?: string;
+  aiSummary?: string; // ✨ Added aiSummary field
 };
 
 export type ApiReview = {
@@ -67,7 +69,7 @@ export function getReviews(productId: number | string, params?: { page?: number;
   if (params?.rating) {
     q.append('rating', String(params.rating));
   }
-
+  
   return request<Page<ApiReview>>(`${BASE_URL}/api/products/${productId}/reviews?${q.toString()}`);
 }
 
