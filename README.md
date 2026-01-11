@@ -95,7 +95,7 @@ The system follows a layered architecture:
 cd backend
 ./mvnw spring-boot:run
 ```
-See [backend/README_BACKEND.md](./backend/README_BACKEND.md) for more details.
+See [backend/README_BACKEND.md](./backend/README.md) for more details.
 
 ### Frontend (Reference Implementation - React Native)
 ```bash
@@ -103,7 +103,7 @@ cd mobile
 npm install
 npx expo start
 ```
-See [mobile/README_FRONTEND.md](./mobile/README_FRONTEND.md) for more details.
+See [mobile/README_FRONTEND.md](./mobile/README.md) for more details.
 - Press `w` for Web
 - Press `a` for Android (Emulator)
 - Scan QR code for iOS (Expo Go)
