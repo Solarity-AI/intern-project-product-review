@@ -522,3 +522,19 @@ Typical structure you should expect:
 - `components/AddReviewModal.tsx`
 - `components/AISummaryCard.tsx`
 - `components/AIChatModal.tsx`
+
+---
+
+## 🚀 Planned Improvements & Roadmap
+
+### 1. Security Enhancements
+- **Secure Storage:** Use `expo-secure-store` for storing sensitive tokens (JWT).
+- **Authentication Flow:** Implement Login/Register screens and AuthContext.
+
+### 2. Validation
+- **Form Validation:** Use libraries like `yup` or `zod` for robust form validation (e.g., in AddReviewModal).
+
+### 3. Testing
+- **Unit Testing:** Add Jest tests for utility functions and hooks.
+- **Component Testing:** Use React Native Testing Library for component interactions.
+- **E2E Testing:** Implement Detox or Maestro for end-to-end user flow testing.

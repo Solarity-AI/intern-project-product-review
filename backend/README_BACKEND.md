@@ -130,3 +130,22 @@ Mobile app communicates via REST endpoints exposed in controllers.
 ## Notes for Interns
 - Start from controller → service → repository
 - Never put business logic in controllers
+
+---
+
+## 🚀 Planned Improvements & Roadmap
+
+### 1. Security Enhancements
+- **Spring Security Integration:** We plan to integrate Spring Security 6 to secure the API.
+- **JWT Authentication:** Implementation of stateless authentication using JSON Web Tokens (JWT).
+- **Authorization:** Protecting sensitive endpoints (e.g., `POST /reviews` will require login).
+- **Role-Based Access Control:** Differentiating between Admin and User roles.
+
+### 2. Validation with AOP
+- **Aspect-Oriented Programming (AOP):** Centralizing validation logic using Aspects to keep controllers clean.
+- **Custom Annotations:** Creating reusable annotations for business rules.
+- **Global Exception Handling:** Ensuring consistent error responses across the application.
+
+### 3. Integration Testing
+- **Testcontainers:** Using Testcontainers to spin up real database instances (PostgreSQL) for reliable integration tests.
+- **Environment Independence:** Ensuring tests run consistently across different environments (CI/CD, Local).

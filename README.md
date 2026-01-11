@@ -1,101 +1,90 @@
 # 📱 Product Review Application
 
-**Backend:** Spring Boot  
-**Mobile App:** React Native (Expo)  
-**Web:** React Native Web  
-**Authentication:** Not included (out of scope)
+**Backend:** Spring Boot (Java)  
+**Frontend:** React Native (Expo) - *Reference Implementation*  
+**Database:** H2 (Dev) / PostgreSQL (Prod)  
+**Deployment:** Heroku (Backend) & Vercel (Web)
 
 ---
 
 ## 📌 Project Overview
 
-The **Product Review Application** is a full-stack system that allows users to browse products, submit reviews, rate products, and view aggregated feedback through a modern mobile and web interface.  
-The project focuses on **core backend logic, REST API design, data modeling, and mobile UI/UX**, intentionally excluding authentication to keep the scope implementation-focused.
+The **Product Review Application** is a full-stack system designed to demonstrate modern software architecture patterns. It allows users to browse products, filter by categories, view detailed reviews with AI-generated summaries, and submit their own feedback.
+
+The project emphasizes **clean architecture, REST API design, performance optimization (pagination, server-side filtering), and cross-platform development**.
 
 ---
 
-## 🎯 Objectives
+## 🎓 For Future Interns
 
-- Build a scalable RESTful backend using **Spring Boot**
-- Develop a cross-platform mobile application using **React Native**
-- Deploy a web-accessible version using **React Native Web**
-- Allow users to:
-  - View products
-  - Submit reviews and ratings
-  - Browse existing reviews
-- Demonstrate clean architecture and separation of concerns
+**Assignment:** You must choose and implement **only one** of the following frontend stacks:
+
+1.  **iOS (Swift):** See [README-iOS-Swift.md](./README-iOS-Swift.md) for requirements.
+2.  **Android (Kotlin):** See [README-Android-Kotlin.md](./README-Android-Kotlin.md) for requirements.
+
+> **Note:** The current `mobile/` folder contains a **React Native** implementation. This serves as a **reference** for how the UI should look and how to consume the Backend API. You are expected to build a native version (Swift or Kotlin) matching these features.
 
 ---
 
-## 🧩 Core Features
+## 🏗️ System Architecture
+
+> **[Link to Excalidraw Architecture Diagram]** *(To be added)*
+
+The system follows a layered architecture:
+1.  **Presentation Layer:** Mobile/Web App (React Native, Swift, or Kotlin)
+2.  **API Layer:** Spring Boot REST Controllers
+3.  **Business Layer:** Service Interfaces & Implementations
+4.  **Data Layer:** JPA Repositories & Database
+
+---
+
+## 🚀 Deliverables & Demo
+
+### 🎥 Code Walkthroughs
+- **Frontend Code Walkthrough:** [Google Drive Link] *(To be added)*
+- **Backend Code Walkthrough:** [Google Drive Link] *(To be added)*
+
+### 📱 Application Demo
+- **Live App Demo:** [Google Drive Link] *(To be added)*
+
+### 📦 Build Artifacts
+- **Android APK:** [Google Drive Link] *(To be added)*
+- **Public Web App:** [Vercel Link Here] (e.g., `https://product-review-app.vercel.app`)
+
+---
+
+## 🧩 Key Features Implemented
 
 ### 🛒 Product Management
-- Retrieve a list of products
-- **Server-side Filtering:** Filter products by category (e.g., Tablets, Gaming)
-- View product details:
-  - Name, Description, Category, Price, Image
-  - Average rating & Review count
-- Backend supports pagination and sorting
+- **Server-Side Pagination:** Efficiently loads data in chunks.
+- **Dynamic Filtering:** Filter products by category and reviews by rating.
+- **Rating Breakdown:** Server-calculated distribution of star ratings.
 
-### ⭐ Review & Rating System
-- Users can:
-  - Submit a text-based review
-  - Rate products on a numeric scale (e.g., 1–5)
-- **Rating Breakdown:** Visual bar chart showing the distribution of ratings (calculated server-side)
-- **Advanced Filtering:** Filter reviews by star rating (e.g., show only 5-star reviews)
-- **Pagination:** "Load More" functionality for efficient data fetching
+### 🤖 AI Integration
+- **AI Review Summary:** Automatically generates a summary of user reviews using AI logic.
+- **AI Assistant:** Interactive chat interface for product queries.
 
-### 📊 Aggregation & Insights
-- Backend calculates:
-  - Average ratings
-  - Review counts
-  - Rating distribution (Histogram)
-- Optimized for read-heavy access patterns
-
-### 📱 Mobile & Web Experience
-- Cross-platform support (iOS, Android, Web)
-- Key screens:
-  - Product List (with Category Filter)
-  - Product Details (with Rating Breakdown)
-  - Add Review Modal
-- Reusable UI components
-- API-driven data rendering
-- Loading and error states handled gracefully
+### 🛠️ Technical Highlights
+- **Dependency Inversion:** Controllers depend on Interfaces, not concrete classes.
+- **DTO Pattern:** Strict separation between Database Entities and API responses.
+- **Optimized SQL:** Custom queries for aggregation and performance.
 
 ---
 
-## 🏗️ Architecture
+## 🔮 Future Improvements & Roadmap
 
-### Backend (Spring Boot)
-- RESTful API architecture
-- Layered structure: Controller, Service, Repository
-- JPA / Hibernate for ORM
-- **H2 Database** (In-memory for dev/demo)
-- **Deployed on Heroku**
-- DTO-based request/response models
-- Input validation (ratings range, review length, etc.)
+### 🔒 Security Enhancements (Planned)
+- **Spring Security Integration:** Implement JWT-based authentication.
+- **Role-Based Access Control:** Admin vs User roles.
+- **Secure Token Management:** Refresh tokens and secure storage.
 
-### Mobile App (React Native)
-- Functional components with hooks
-- API integration using `fetch`
-- **Server-side Pagination & Filtering** integration
-- **Deployed on Vercel** (Web version)
+### 🛡️ Validation with AOP (Planned)
+- **Centralized Validation:** Use Aspect-Oriented Programming (AOP) to handle request validation globally.
+- **Consistent Error Handling:** Unified error response structure.
 
----
-
-## 🚀 Deployment
-
-### Backend
-The backend is deployed on **Heroku**.
-- Base URL: `https://product-review-app-solarityai-a391ad53d79a.herokuapp.com`
-
-### Web App
-The web version is deployed on **Vercel**.
-- Public URL: [Your Vercel Link Here] (e.g., `https://product-review-app.vercel.app`)
-
-### Mobile App (APK)
-- Built using **EAS Build** (Expo Application Services).
-- APK can be generated for Android testing.
+### 🧪 Integration Testing (Planned)
+- **Testcontainers:** Use Docker containers for reliable integration tests.
+- **End-to-End Testing:** Validate full user flows.
 
 ---
 
@@ -106,39 +95,24 @@ The web version is deployed on **Vercel**.
 cd backend
 ./mvnw spring-boot:run
 ```
+See [backend/README_BACKEND.md](./backend/README_BACKEND.md) for more details.
 
-### Mobile / Web
+### Frontend (Reference Implementation - React Native)
 ```bash
 cd mobile
 npm install
 npx expo start
 ```
+See [mobile/README_FRONTEND.md](./mobile/README_FRONTEND.md) for more details.
 - Press `w` for Web
 - Press `a` for Android (Emulator)
 - Scan QR code for iOS (Expo Go)
 
 ---
 
-## 🚫 Out of Scope
-- Authentication & authorization
-- User accounts or roles
-- Payments or checkout
-- Admin dashboards
+## 📂 Project Structure
 
----
-
-## 🧪 Testing & Quality
-- Unit tests for service and repository layers
-- Integration tests for REST endpoints
-- Validation and error handling
-- Consistent API response formats
-
----
-
-## 💡 Why This Project
-
-This project demonstrates:
-- Strong **Spring Boot backend fundamentals**
-- Clean **REST API design** (Pagination, Filtering, Aggregation)
-- Practical **React Native mobile & web development**
-- Scalable architecture patterns used in real-world applications
+- **/backend:** Spring Boot application source code.
+- **/mobile:** React Native (Expo) application source code (Reference).
+- **README-iOS-Swift.md:** Instructions for iOS implementation option.
+- **README-Android-Kotlin.md:** Instructions for Android implementation option.
