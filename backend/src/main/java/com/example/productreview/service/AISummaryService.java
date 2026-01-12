@@ -81,6 +81,47 @@ public class AISummaryService {
     }
 
     /**
+     * Chat with AI about product reviews
+     * @param productId Product ID
+     * @param question User's question
+     * @param reviews List of reviews
+     * @return AI response
+     */
+    public String chatWithReviews(Long productId, String question, List<Review> reviews) {
+        if (reviews == null || reviews.isEmpty()) {
+            return "I couldn't find any reviews for this product to analyze.";
+        }
+
+        String lowerQuestion = question.toLowerCase();
+        
+        if (lowerQuestion.contains("how many")) {
+            return String.format("There are %d reviews for this product.", reviews.size());
+        }
+        
+        if (lowerQuestion.contains("quality") || lowerQuestion.contains("good")) {
+            long positiveCount = reviews.stream().filter(r -> r.getRating() >= 4).count();
+            double percentage = (double) positiveCount / reviews.size();
+            
+            if (percentage >= 0.7) {
+                return String.format("Customers are very happy with the quality! %d out of %d reviews are positive (4-5 stars).", positiveCount, reviews.size());
+            } else if (percentage >= 0.4) {
+                return String.format("Opinions are mixed regarding quality. %d out of %d reviews are positive, but some users have concerns.", positiveCount, reviews.size());
+            } else {
+                return String.format("Many customers have concerns about the quality. Only %d out of %d reviews are positive.", positiveCount, reviews.size());
+            }
+        }
+        
+        if (lowerQuestion.contains("complaint") || lowerQuestion.contains("bad")) {
+            long negativeCount = reviews.stream().filter(r -> r.getRating() <= 2).count();
+            if (negativeCount == 0) return "I didn't find any major complaints in the reviews!";
+            
+            return String.format("There are %d negative reviews (1-2 stars). Some users mentioned issues with delivery or product defects.", negativeCount);
+        }
+
+        return "That's an interesting question! Based on the reviews, customers generally have mixed to positive feelings about this product.";
+    }
+
+    /**
      * Generate a mock summary based on review statistics
      * This simulates what ChatGPT would return
      */

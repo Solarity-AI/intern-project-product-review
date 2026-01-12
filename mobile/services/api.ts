@@ -86,3 +86,12 @@ export function markReviewAsHelpful(reviewId: number | string) {
     method: "PUT",
   });
 }
+
+// ✨ New Chat Function
+export function chatWithAI(productId: number | string, question: string) {
+  return request<{ answer: string }>(`${BASE_URL}/api/products/${productId}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question }),
+  });
+}

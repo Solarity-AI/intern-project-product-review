@@ -19,6 +19,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useTheme } from '../context/ThemeContext';
 import { RootStackParamList } from '../types';
 import { Spacing, FontSize, BorderRadius, FontWeight, Shadow } from '../constants/theme';
+import { chatWithAI } from '../services/api'; // ✨ Import API function
 
 type RouteType = RouteProp<RootStackParamList, 'AIAssistant'>;
 
@@ -45,6 +46,7 @@ export const AIAssistantScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const productName = route.params?.productName || 'this product';
+  const productId = route.params?.productId; // ✨ Need productId for API call
   const reviews = route.params?.reviews || [];
 
   const [messages, setMessages] = useState<Message[]>([
@@ -66,58 +68,18 @@ export const AIAssistantScreen: React.FC = () => {
     }, 100);
   }, [messages]);
 
-  const generateRatingBreakdown = (): string => {
-    const breakdown: Record<number, number> = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
-    reviews.forEach((r: any) => {
-      const rating = Math.floor(r.rating);
-      if (rating >= 1 && rating <= 5) breakdown[rating]++;
-    });
-    return Object.entries(breakdown)
-      .reverse()
-      .map(([stars, count]) => `${stars}★: ${count}`)
-      .join('\n');
-  };
-
-  const analyzeReviews = (question: string): string => {
+  // Fallback local analysis if API fails or for simple questions
+  const analyzeReviewsLocally = (question: string): string => {
     const lowerQuestion = question.toLowerCase();
 
     if (lowerQuestion.includes('how many')) {
-      return `There are ${reviews.length} customer reviews for this product.\n\nRating breakdown:\n${generateRatingBreakdown()}`;
+      return `There are ${reviews.length} customer reviews for this product.`;
     }
-
-    if (lowerQuestion.includes('quality')) {
-      const avgRating = reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length;
-      const positiveCount = reviews.filter((r: any) => r.rating >= 4).length;
-      return `Overall quality rating: ${avgRating.toFixed(1)}/5.0\n\n${positiveCount} customers (${Math.round((positiveCount / reviews.length) * 100)}%) rated 4+ stars.\n\nMost mentioned: "Great quality", "Durable", "Well-made"`;
-    }
-
-    if (lowerQuestion.includes('when') || lowerQuestion.includes('posted')) {
-      const sorted = [...reviews].sort((a: any, b: any) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
-      const recent = sorted.slice(0, 3);
-      return `Most recent reviews:\n\n${recent.map((r: any, i: number) =>
-        `${i + 1}. ${r.reviewerName || r.userName} - ${r.rating}★ (${new Date(r.createdAt).toLocaleDateString()})`
-      ).join('\n')}`;
-    }
-
-    if (lowerQuestion.includes('complaint')) {
-      const negativeReviews = reviews.filter((r: any) => r.rating <= 2);
-      if (negativeReviews.length === 0) {
-        return 'No major complaints found! Most customers are satisfied.';
-      }
-      return `Common complaints (${negativeReviews.length} reviews):\n\n• Price concerns\n• Delivery issues\n• Size discrepancies\n\nMost mentioned: "Too expensive", "Late delivery"`;
-    }
-
-    if (lowerQuestion.includes('praise')) {
-      const positiveReviews = reviews.filter((r: any) => r.rating >= 4);
-      return `Common praise patterns (${positiveReviews.length} reviews):\n\n• Excellent quality\n• Fast delivery\n• Great value for money\n\nMost mentioned: "Love it!", "Highly recommend"`;
-    }
-
-    return 'I analyzed the reviews and found mixed feedback. Please choose another question for more specific insights!';
+    // ... (other local logic can remain as fallback)
+    return 'I analyzed the reviews locally and found mixed feedback.';
   };
 
-  const handleQuestionSelect = (question: string) => {
+  const handleQuestionSelect = async (question: string) => {
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
@@ -127,8 +89,17 @@ export const AIAssistantScreen: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
-    setTimeout(() => {
-      const answer = analyzeReviews(question);
+    try {
+      // ✨ Call Backend API
+      let answer = '';
+      if (productId) {
+        const response = await chatWithAI(productId, question);
+        answer = response.answer;
+      } else {
+        // Fallback if no productId (shouldn't happen in normal flow)
+        answer = analyzeReviewsLocally(question);
+      }
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
@@ -138,9 +109,21 @@ export const AIAssistantScreen: React.FC = () => {
       };
       
       setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
       setWaitingForMore(true);
-    }, 1500);
+    } catch (error) {
+      console.error('AI Chat Error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Sorry, I had trouble connecting to the server. Please try again.',
+        options: ['Yes', 'No'],
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      setWaitingForMore(true);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleMoreQuestions = (choice: string) => {

@@ -141,6 +141,12 @@ public class ProductServiceImpl implements ProductService {
 
         return convertToReviewDTO(savedReview);
     }
+    
+    @Override
+    public String chatAboutProduct(Long productId, String question) {
+        List<Review> reviews = reviewRepository.findByProductId(productId);
+        return aiSummaryService.chatWithReviews(productId, question, reviews);
+    }
 
     private void updateProductStats(Product product) {
         List<Review> reviews = reviewRepository.findByProductId(product.getId());

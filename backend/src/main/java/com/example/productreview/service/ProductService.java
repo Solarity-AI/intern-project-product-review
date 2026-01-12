@@ -22,4 +22,7 @@ public interface ProductService {
     ReviewDTO addReview(Long productId, ReviewDTO reviewDTO);
     
     ReviewDTO markReviewAsHelpful(Long reviewId);
+    
+    // ✨ New Chat Method
+    String chatAboutProduct(Long productId, String question);
 }
