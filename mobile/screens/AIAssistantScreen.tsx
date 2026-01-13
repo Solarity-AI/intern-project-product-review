@@ -19,7 +19,7 @@ import { ScreenWrapper } from '../components/ScreenWrapper';
 import { useTheme } from '../context/ThemeContext';
 import { RootStackParamList } from '../types';
 import { Spacing, FontSize, BorderRadius, FontWeight, Shadow } from '../constants/theme';
-import { chatWithAI } from '../services/api'; // ✨ Import API function
+import { chatWithAI } from '../services/api';
 
 type RouteType = RouteProp<RootStackParamList, 'AIAssistant'>;
 
@@ -46,8 +46,11 @@ export const AIAssistantScreen: React.FC = () => {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const productName = route.params?.productName || 'this product';
-  const productId = route.params?.productId; // ✨ Need productId for API call
+  const productId = route.params?.productId;
   const reviews = route.params?.reviews || [];
+
+  const processingRef = useRef(false);
+  const isExitingRef = useRef(false);
 
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -61,142 +64,161 @@ export const AIAssistantScreen: React.FC = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [waitingForMore, setWaitingForMore] = useState(false);
-  
-  // ✨ Prevent double-click and track processed messages
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastActiveMessageId, setLastActiveMessageId] = useState<string>('1');
-  const isExitingRef = useRef(false); // ✨ Track if we're in exit flow
 
   useEffect(() => {
-    setTimeout(() => {
+    const t = setTimeout(() => {
       scrollViewRef.current?.scrollToEnd({ animated: true });
     }, 100);
+    return () => clearTimeout(t);
   }, [messages]);
 
-  // Fallback local analysis if API fails or for simple questions
-  const analyzeReviewsLocally = (question: string): string => {
-    const lowerQuestion = question.toLowerCase();
+  const analyzeReviewsLocally = useCallback(
+    (question: string): string => {
+      const lowerQuestion = question.toLowerCase();
+      if (lowerQuestion.includes('how many')) {
+        return `There are ${reviews.length} customer reviews for this product.`;
+      }
+      return 'I analyzed the reviews locally and found mixed feedback.';
+    },
+    [reviews.length]
+  );
 
-    if (lowerQuestion.includes('how many')) {
-      return `There are ${reviews.length} customer reviews for this product.`;
-    }
-    // ... (other local logic can remain as fallback)
-    return 'I analyzed the reviews locally and found mixed feedback.';
-  };
+  const handleQuestionSelect = useCallback(
+    async (question: string, messageId: string) => {
+      if (processingRef.current || isProcessing || isLoading || isExitingRef.current) return;
 
-  // ✨ Wrapped with useCallback and double-click protection
-  const handleQuestionSelect = useCallback(async (question: string, messageId: string) => {
-    // Prevent double-click or processing if already in progress
-    if (isProcessing || isLoading || isExitingRef.current) {
-      console.log('Ignoring click - already processing');
-      return;
-    }
-    
-    // Only allow clicking on the last active message
-    if (messageId !== lastActiveMessageId) {
-      console.log('Ignoring click - not the active message');
-      return;
-    }
+      processingRef.current = true;
 
-    setIsProcessing(true);
-    
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: question,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      // ✨ Call Backend API
-      let answer = '';
-      if (productId) {
-        const response = await chatWithAI(productId, question);
-        answer = response.answer;
-      } else {
-        // Fallback if no productId (shouldn't happen in normal flow)
-        answer = analyzeReviewsLocally(question);
+      // only allow click for the active assistant message
+      if (messageId !== lastActiveMessageId) {
+        processingRef.current = false;
+        return;
       }
 
-      const newMessageId = (Date.now() + 1).toString();
-      const assistantMessage: Message = {
-        id: newMessageId,
-        role: 'assistant',
-        content: answer,
-        options: ['Yes', 'No'],
+      setIsProcessing(true);
+
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: question,
         timestamp: new Date(),
       };
-      
-      setMessages((prev) => [...prev, assistantMessage]);
-      setLastActiveMessageId(newMessageId); // ✨ Update active message
-      setWaitingForMore(true);
-    } catch (error) {
-      console.error('AI Chat Error:', error);
-      const newMessageId = (Date.now() + 1).toString();
-      const errorMessage: Message = {
-        id: newMessageId,
-        role: 'assistant',
-        content: 'Sorry, I had trouble connecting to the server. Please try again.',
-        options: ['Yes', 'No'],
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-      setLastActiveMessageId(newMessageId); // ✨ Update active message
-      setWaitingForMore(true);
-    } finally {
-      setIsLoading(false);
-      setIsProcessing(false);
-    }
-  }, [isProcessing, isLoading, lastActiveMessageId, productId]);
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
 
-  // ✨ Wrapped with useCallback and double-click protection
-  const handleMoreQuestions = useCallback((choice: string, messageId: string) => {
-    // Prevent double-click or processing if already in progress
-    if (isProcessing || isExitingRef.current) {
-      console.log('Ignoring click - already processing');
-      return;
-    }
-    
-    // Only allow clicking on the last active message
-    if (messageId !== lastActiveMessageId) {
-      console.log('Ignoring click - not the active message');
-      return;
-    }
+      try {
+        let answer = '';
+        if (productId) {
+          const response = await chatWithAI(productId, question);
+          answer = response.answer;
+        } else {
+          answer = analyzeReviewsLocally(question);
+        }
 
-    setIsProcessing(true);
-    setWaitingForMore(false);
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: choice,
-      timestamp: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-
-    if (choice === 'No') {
-      // ✨ Mark as exiting to prevent any further interactions
-      isExitingRef.current = true;
-      
-      setTimeout(() => {
-        const exitMessage: Message = {
-          id: (Date.now() + 1).toString(),
+        // 1) Answer bubble (no buttons)
+        const answerMessageId = (Date.now() + 1).toString();
+        const answerMessage: Message = {
+          id: answerMessageId,
           role: 'assistant',
-          content: 'Thank you for using AI Assistant! Feel free to come back anytime. 👋',
+          content: answer,
           timestamp: new Date(),
-          // ✨ No options - exit message shouldn't have buttons
         };
-        setMessages((prev) => [...prev, exitMessage]);
-        setLastActiveMessageId(''); // ✨ No active message anymore
+
+        // 2) Follow-up bubble with Yes/No buttons (separate bubble)
+        const followUpMessageId = (Date.now() + 2).toString();
+        const followUpMessage: Message = {
+          id: followUpMessageId,
+          role: 'assistant',
+          content: 'Do you have more questions?',
+          options: ['Yes', 'No'],
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, answerMessage, followUpMessage]);
+        setLastActiveMessageId(followUpMessageId);
+        setWaitingForMore(true);
+      } catch (error) {
+        console.error('AI Chat Error:', error);
+
+        const errAnswerId = (Date.now() + 1).toString();
+        const errAnswer: Message = {
+          id: errAnswerId,
+          role: 'assistant',
+          content: 'Sorry, I had trouble connecting to the server. Please try again.',
+          timestamp: new Date(),
+        };
+
+        const followUpMessageId = (Date.now() + 2).toString();
+        const followUpMessage: Message = {
+          id: followUpMessageId,
+          role: 'assistant',
+          content: 'Do you have more questions?',
+          options: ['Yes', 'No'],
+          timestamp: new Date(),
+        };
+
+        setMessages((prev) => [...prev, errAnswer, followUpMessage]);
+        setLastActiveMessageId(followUpMessageId);
+        setWaitingForMore(true);
+      } finally {
+        setIsLoading(false);
+        setIsProcessing(false);
+        processingRef.current = false;
+      }
+    },
+    [analyzeReviewsLocally, isLoading, isProcessing, lastActiveMessageId, productId]
+  );
+
+  const handleMoreQuestions = useCallback(
+    (choice: string, messageId: string) => {
+      if (processingRef.current || isProcessing || isExitingRef.current) return;
+
+      processingRef.current = true;
+
+      if (messageId !== lastActiveMessageId) {
+        processingRef.current = false;
+        return;
+      }
+
+      setIsProcessing(true);
+      setWaitingForMore(false);
+
+      // Show user choice as a normal user bubble (your yellow bubble)
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content: choice,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      if (choice === 'No') {
+        isExitingRef.current = true;
 
         setTimeout(() => {
-          navigation.goBack();
-        }, 2000);
-      }, 500);
-    } else {
-      // choice === 'Yes'
+          const exitMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'assistant',
+            content: 'Thank you for using AI Assistant! Feel free to come back anytime. 👋',
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, exitMessage]);
+          setLastActiveMessageId('');
+          setIsProcessing(false);
+          processingRef.current = false;
+
+          setTimeout(() => {
+            navigation.goBack();
+          }, 2000);
+        }, 350);
+
+        return;
+      }
+
+      // choice === 'Yes' -> show question options again
       setTimeout(() => {
         const newMessageId = (Date.now() + 1).toString();
         const restartMessage: Message = {
@@ -207,100 +229,128 @@ export const AIAssistantScreen: React.FC = () => {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, restartMessage]);
-        setLastActiveMessageId(newMessageId); // ✨ Update active message
-        setIsProcessing(false); // ✨ Allow new interactions
-      }, 500);
-    }
-  }, [isProcessing, lastActiveMessageId, navigation]);
+        setLastActiveMessageId(newMessageId);
+        setIsProcessing(false);
+        processingRef.current = false;
+      }, 350);
+    },
+    [isProcessing, lastActiveMessageId, navigation]
+  );
 
-  const renderMessage = (message: Message) => {
+  const renderMessage = (message: Message, index: number) => {
     const isUser = message.role === 'user';
-    // ✨ Check if this message's options should be interactive
     const isActiveMessage = message.id === lastActiveMessageId;
-    const shouldShowOptions = !isUser && message.options && message.options.length > 0;
-    const isDisabled = !isActiveMessage || isProcessing || isLoading || isExitingRef.current;
 
+    const shouldShowOptions =
+      !isUser && isActiveMessage && !!message.options && message.options.length > 0;
+
+    const isDisabled = isProcessing || isLoading || isExitingRef.current;
+
+    // ✅ Show avatar only for the FIRST assistant message in a consecutive assistant block
+    const prev = index > 0 ? messages[index - 1] : undefined;
+    const showAvatar = !isUser && (!prev || prev.role !== 'assistant');
+
+    if (isUser) {
+      return (
+        <View key={message.id} style={[styles.messageBubble, styles.userBubble]}>
+          <View
+            style={[
+              styles.bubbleContent,
+              {
+                backgroundColor: colors.primary,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.messageText, { color: colors.primaryForeground }]}>
+              {message.content}
+            </Text>
+          </View>
+
+          <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
+            {message.timestamp.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+        </View>
+      );
+    }
+
+    // assistant bubble(s) with grouped avatar layout
     return (
-      <View
-        key={message.id}
-        style={[
-          styles.messageBubble,
-          isUser ? styles.userBubble : styles.assistantBubble,
-        ]}
-      >
-        {!isUser && (
-          <View style={styles.aiIconContainer}>
+      <View key={message.id} style={[styles.assistantRow]}>
+        <View style={styles.avatarColumn}>
+          {showAvatar ? (
             <LinearGradient colors={['#8B5CF6', '#6366F1']} style={styles.aiIcon}>
               <Ionicons name="sparkles" size={16} color="#fff" />
             </LinearGradient>
-          </View>
-        )}
-
-        <View
-          style={[
-            styles.bubbleContent,
-            {
-              backgroundColor: isUser ? colors.primary : colors.card,
-              borderColor: colors.border,
-            },
-          ]}
-        >
-          <Text
-            style={[
-              styles.messageText,
-              { color: isUser ? colors.primaryForeground : colors.foreground },
-            ]}
-          >
-            {message.content}
-          </Text>
-
-          {/* ✨ Only show options if they exist and this is the active message */}
-          {shouldShowOptions && (
-            <View style={styles.optionsContainer}>
-              <Text style={[styles.optionsTitle, { color: colors.mutedForeground }]}>
-                {waitingForMore ? 'Do you have more questions?' : 'Choose a question:'}
-              </Text>
-              {message.options!.map((option, index) => (
-                <TouchableOpacity
-                  key={index}
-                  activeOpacity={isDisabled ? 1 : 0.8}
-                  disabled={isDisabled}
-                  style={[
-                    styles.optionButton,
-                    {
-                      backgroundColor: isDisabled ? colors.muted : colors.secondary,
-                      borderColor: colors.border,
-                      opacity: isDisabled ? 0.5 : 1,
-                    },
-                  ]}
-                  onPress={() => {
-                    if (isDisabled) return;
-                    
-                    if (waitingForMore) {
-                      handleMoreQuestions(option, message.id);
-                    } else {
-                      handleQuestionSelect(option, message.id);
-                    }
-                  }}
-                >
-                  <Text style={[
-                    styles.optionText, 
-                    { color: isDisabled ? colors.mutedForeground : colors.foreground }
-                  ]}>
-                    {option}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          ) : (
+            <View style={styles.avatarPlaceholder} />
           )}
         </View>
 
-        <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
-          {message.timestamp.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}
-        </Text>
+        <View style={[styles.messageBubble, styles.assistantBubble]}>
+          <View
+            style={[
+              styles.bubbleContent,
+              {
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Text style={[styles.messageText, { color: colors.foreground }]}>
+              {message.content}
+            </Text>
+
+            {shouldShowOptions && (
+              <View style={styles.optionsContainer}>
+                <Text style={[styles.optionsTitle, { color: colors.mutedForeground }]}>
+                  {waitingForMore ? 'Choose one:' : 'Choose a question:'}
+                </Text>
+
+                {message.options!.map((option, i) => (
+                  <TouchableOpacity
+                    key={`${message.id}-${i}`}
+                    activeOpacity={isDisabled ? 1 : 0.8}
+                    disabled={isDisabled}
+                    style={[
+                      styles.optionButton,
+                      {
+                        backgroundColor: isDisabled ? colors.muted : colors.secondary,
+                        borderColor: colors.border,
+                        opacity: isDisabled ? 0.5 : 1,
+                      },
+                    ]}
+                    onPress={() => {
+                      if (isDisabled) return;
+
+                      if (waitingForMore) handleMoreQuestions(option, message.id);
+                      else handleQuestionSelect(option, message.id);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.optionText,
+                        { color: isDisabled ? colors.mutedForeground : colors.foreground },
+                      ]}
+                    >
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
+            {message.timestamp.toLocaleTimeString('en-US', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </Text>
+        </View>
       </View>
     );
   };
@@ -334,7 +384,7 @@ export const AIAssistantScreen: React.FC = () => {
         contentContainerStyle={styles.messagesContainer}
         showsVerticalScrollIndicator={false}
       >
-        {messages.map(renderMessage)}
+        {messages.map((m, i) => renderMessage(m, i))}
 
         {isLoading && (
           <View style={[styles.loadingBubble, { backgroundColor: colors.card }]}>
@@ -348,6 +398,8 @@ export const AIAssistantScreen: React.FC = () => {
     </ScreenWrapper>
   );
 };
+
+const AVATAR_COL_WIDTH = 44;
 
 const styles = StyleSheet.create({
   header: {
@@ -387,18 +439,19 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
 
-  messageBubble: {
-    gap: Spacing.xs,
+  // ✅ assistant row layout (WhatsApp-like grouping)
+  assistantRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.sm,
   },
-  userBubble: {
-    alignItems: 'flex-end',
-  },
-  assistantBubble: {
+  avatarColumn: {
+    width: AVATAR_COL_WIDTH,
     alignItems: 'flex-start',
   },
-
-  aiIconContainer: {
-    marginBottom: Spacing.xs,
+  avatarPlaceholder: {
+    width: 32,
+    height: 32,
   },
   aiIcon: {
     width: 32,
@@ -407,6 +460,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     ...Shadow.soft,
+  },
+
+  messageBubble: {
+    gap: Spacing.xs,
+  },
+  userBubble: {
+    alignItems: 'flex-end',
+  },
+  assistantBubble: {
+    alignItems: 'flex-start',
+    flex: 1,
   },
 
   bubbleContent: {
@@ -460,7 +524,6 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     ...Shadow.soft,
   },
-
   loadingText: {
     fontSize: FontSize.sm,
   },
