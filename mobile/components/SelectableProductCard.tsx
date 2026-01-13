@@ -26,8 +26,8 @@ interface SelectableProductCardProps {
   onLongPress: (product: ApiProduct) => void;
 }
 
-function imageForCategory(category?: string) {
-  const c = (category ?? '').toLowerCase();
+function imageForCategory(categories?: string[]) {
+  const c = (categories && categories.length > 0 ? categories[0] : '').toLowerCase();
   if (c.includes('audio')) return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
   if (c.includes('smart') || c.includes('phone') || c.includes('mobile')) return 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80';
   if (c.includes('camera') || c.includes('photo')) return 'https://images.unsplash.com/photo-1519183071298-a2962be96cdb?w=800&q=80';
@@ -47,20 +47,16 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
   const { colors, colorScheme } = useTheme();
 
   const imageUri = useMemo(() => {
-    const direct =
-      (product as any)?.imageUrl ||
-      (product as any)?.image ||
-      (product as any)?.thumbnailUrl;
-
+    const direct = product.imageUrl;
     if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
-    return imageForCategory((product as any)?.category);
+    return imageForCategory(product.categories);
   }, [product]);
 
-  const reviewCount = (product as any)?.reviewCount ?? (product as any)?.totalReviews ?? 0;
-  const avgRating = (product as any)?.averageRating ?? 0;
+  const reviewCount = product.reviewCount ?? 0;
+  const avgRating = product.averageRating ?? 0;
 
   const { isInWishlist, toggleWishlist } = useWishlist();
-  const productId = String((product as any)?.id ?? '');
+  const productId = String(product.id ?? '');
   const inWishlist = isInWishlist(productId);
 
   // Wishlist button styling - theme-aware
@@ -76,12 +72,12 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
     e.stopPropagation();
     toggleWishlist({
       id: productId,
-      name: (product as any)?.name ?? 'Product',
-      price: (product as any)?.price,
+      name: product.name ?? 'Product',
+      price: product.price,
       imageUrl: imageUri,
-      category: (product as any)?.category,
+      categories: product.categories,
       averageRating: avgRating,
-    });
+    } as any);
   };
 
   const shakeAnim = useRef(new Animated.Value(0)).current;
@@ -122,6 +118,14 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
     outputRange: ['-2deg', '2deg'],
   });
 
+  // ✨ Fallback logic for category display
+  let displayCategory = 'Uncategorized';
+  if (product.categories && product.categories.length > 0) {
+    displayCategory = product.categories[0];
+  } else if ((product as any).category) {
+    displayCategory = (product as any).category;
+  }
+
   return (
     <Animated.View
       style={
@@ -154,7 +158,7 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
           {/* Wishlist button (normal mode) */}
           {!isSelectionMode && showWishlistButton && (
             <TouchableOpacity
-              style={[styles.wishlistButton, { backgroundColor: wishlistButtonBg }]}
+              style={[styles.wishlistButton, { backgroundColor: wishlistButtonBg, zIndex: 2 }]}
               onPress={handleWishlistToggle}
               activeOpacity={0.8}
             >
@@ -180,19 +184,17 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
             </View>
           )}
 
-          {!!(product as any)?.category && (
-            <View style={[styles.categoryBadge, { backgroundColor: colors.secondary }]}>
-              <Text
-                style={[
-                  styles.categoryText,
-                  { color: colors.foreground },
-                  numColumns === 4 && styles.categoryTextCompact,
-                ]}
-              >
-                {(product as any)?.category}
-              </Text>
-            </View>
-          )}
+          <View style={[styles.categoryBadge, { backgroundColor: colors.secondary }]}>
+            <Text
+              style={[
+                styles.categoryText,
+                { color: colors.foreground },
+                numColumns === 4 && styles.categoryTextCompact,
+              ]}
+            >
+              {displayCategory}
+            </Text>
+          </View>
         </View>
 
         <View style={[styles.content, numColumns === 4 && styles.contentCompact]}>
@@ -204,7 +206,7 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
               numColumns === 4 && styles.nameCompact,
             ]}
           >
-            {(product as any)?.name ?? 'Product'}
+            {product.name ?? 'Product'}
           </Text>
 
           <View style={styles.ratingRow}>
@@ -227,9 +229,7 @@ export const SelectableProductCard: React.FC<SelectableProductCardProps> = ({
               numColumns === 4 && styles.priceCompact,
             ]}
           >
-            {typeof (product as any)?.price === 'number'
-              ? `$${(product as any)?.price.toFixed(2)}`
-              : (product as any)?.price ?? ''}
+            {`$${product.price.toFixed(2)}`}
           </Text>
         </View>
       </TouchableOpacity>
@@ -306,6 +306,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
     ...Shadow.soft,
+    zIndex: 1, // ✨ Added zIndex
   },
 
   categoryText: {

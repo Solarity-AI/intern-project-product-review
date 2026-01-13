@@ -13,11 +13,11 @@ import { useTheme } from '../context/ThemeContext';
 
 interface ProductCardProps {
   product: ApiProduct;
-  numColumns?: number; // FIX: For responsive sizing
+  numColumns?: number;
 }
 
-function imageForCategory(category?: string) {
-  const c = (category ?? '').toLowerCase();
+function imageForCategory(categories?: string[]) {
+  const c = (categories && categories.length > 0 ? categories[0] : '').toLowerCase();
   if (c.includes('audio')) return 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&q=80';
   if (c.includes('smart') || c.includes('phone') || c.includes('mobile')) return 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80';
   if (c.includes('camera') || c.includes('photo')) return 'https://images.unsplash.com/photo-1519183071298-a2962be96cdb?w=800&q=80';
@@ -31,29 +31,25 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
   const { colors, colorScheme } = useTheme();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
-  const productId = String((product as any)?.id ?? '');
+  const productId = String(product.id ?? '');
   const inWishlist = isInWishlist(productId);
 
   const imageUri = useMemo(() => {
-    const direct =
-      (product as any)?.imageUrl ||
-      (product as any)?.image ||
-      (product as any)?.thumbnailUrl;
-
+    const direct = product.imageUrl;
     if (typeof direct === 'string' && direct.trim().length > 0) return direct.trim();
-    return imageForCategory((product as any)?.category);
+    return imageForCategory(product.categories);
   }, [product]);
 
-  const reviewCount = (product as any)?.reviewCount ?? (product as any)?.totalReviews ?? 0;
-  const avgRating = (product as any)?.averageRating ?? 0;
+  const reviewCount = product.reviewCount ?? 0;
+  const avgRating = product.averageRating ?? 0;
 
   const handlePress = () => {
     navigation.navigate(
       'ProductDetails',
       {
-        productId: String((product as any)?.id ?? ''),
+        productId: String(product.id ?? ''),
         imageUrl: imageUri,
-        name: (product as any)?.name ?? null,
+        name: product.name ?? null,
       } as any
     );
   };
@@ -62,15 +58,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
     e.stopPropagation();
     toggleWishlist({
       id: productId,
-      name: (product as any)?.name ?? 'Product',
-      price: (product as any)?.price,
+      name: product.name ?? 'Product',
+      price: product.price,
       imageUrl: imageUri,
-      category: (product as any)?.category,
+      categories: product.categories,
       averageRating: avgRating,
-    });
+    } as any);
   };
 
-  // Wishlist button styling - theme-aware
   const wishlistButtonBg = inWishlist 
     ? colors.primary 
     : colorScheme === 'dark' 
@@ -81,8 +76,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
     ? '#fff' 
     : colors.foreground;
 
-  // FIX: Hide wishlist button in 4-column view
   const showWishlistButton = numColumns < 4;
+
+  let displayCategory = 'Uncategorized';
+  
+  if (product.categories && product.categories.length > 0) {
+    displayCategory = product.categories[0];
+  } else if ((product as any).category) {
+    displayCategory = (product as any).category;
+  }
+  
+  // ✨ Debug log
+  console.log(`Product: ${product.name}, DisplayCategory: ${displayCategory}`);
 
   return (
     <TouchableOpacity
@@ -96,10 +101,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
       ]}>
         <Image source={{ uri: imageUri }} style={styles.image} resizeMode="cover" />
 
-        {/* FIX: Wishlist button - hidden in 4-column */}
         {showWishlistButton && (
           <TouchableOpacity
-            style={[styles.wishlistButton, { backgroundColor: wishlistButtonBg }]}
+            style={[styles.wishlistButton, { backgroundColor: wishlistButtonBg, zIndex: 2 }]}
             onPress={handleWishlistToggle}
             activeOpacity={0.8}
           >
@@ -111,17 +115,19 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
           </TouchableOpacity>
         )}
 
-        {!!(product as any)?.category && (
-          <View style={[styles.categoryBadge, { backgroundColor: colors.secondary }]}>
-            <Text style={[
-              styles.categoryText, 
-              { color: colors.foreground },
-              numColumns === 4 && styles.categoryTextCompact
-            ]}>
-              {(product as any)?.category}
-            </Text>
-          </View>
-        )}
+        {/* ✨ Force visible with red background for debugging */}
+        <View style={[
+          styles.categoryBadge, 
+          { backgroundColor: 'red', zIndex: 100 } // Temporary debug style
+        ]}>
+          <Text style={[
+            styles.categoryText, 
+            { color: 'white' },
+            numColumns === 4 && styles.categoryTextCompact
+          ]}>
+            {displayCategory}
+          </Text>
+        </View>
       </View>
 
       <View style={[
@@ -133,7 +139,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
           { color: colors.foreground },
           numColumns === 4 && styles.nameCompact
         ]}>
-          {(product as any)?.name ?? 'Product'}
+          {product.name ?? 'Product'}
         </Text>
 
         <View style={styles.ratingRow}>
@@ -152,9 +158,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
           { color: colors.foreground },
           numColumns === 4 && styles.priceCompact
         ]}>
-          {typeof (product as any)?.price === 'number'
-            ? `$${(product as any)?.price.toFixed(2)}`
-            : (product as any)?.price ?? ''}
+          {`$${product.price.toFixed(2)}`}
         </Text>
       </View>
     </TouchableOpacity>
@@ -175,9 +179,8 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     maxHeight: 220,
   },
-  // FIX: Compact image for 4-column
   imageContainerCompact: {
-    aspectRatio: 1, // Square for 4-column
+    aspectRatio: 1,
     maxHeight: 150,
   },
 
@@ -207,13 +210,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: BorderRadius.full,
     ...Shadow.soft,
+    zIndex: 1,
   },
 
   categoryText: {
     fontSize: 12,
     fontWeight: FontWeight.medium,
   },
-  // FIX: Smaller category text for 4-column
   categoryTextCompact: {
     fontSize: 10,
   },
@@ -222,7 +225,6 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     gap: 6,
   },
-  // FIX: Less padding for 4-column
   contentCompact: {
     padding: Spacing.sm,
     gap: 4,
@@ -232,7 +234,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: FontWeight.semibold,
   },
-  // FIX: Smaller name for 4-column
   nameCompact: {
     fontSize: 11,
   },
@@ -246,7 +247,6 @@ const styles = StyleSheet.create({
   reviewCount: {
     fontSize: 12,
   },
-  // FIX: Smaller review count for 4-column
   reviewCountCompact: {
     fontSize: 10,
   },
@@ -255,7 +255,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: FontWeight.semibold,
   },
-  // FIX: Smaller price for 4-column
   priceCompact: {
     fontSize: 12,
   },

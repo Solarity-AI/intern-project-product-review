@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 // const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com";
 const BASE_URL = "http://192.168.1.6:8080";
+
 const USER_ID_KEY = 'device_user_id';
 
 // Get or create a persistent User ID
@@ -34,7 +35,7 @@ export type ApiProduct = {
   id: number;
   name: string;
   description: string;
-  category: string;
+  categories: string[]; // ✨ Changed from category: string to categories: string[]
   price: number;
   averageRating?: number;
   reviewCount?: number;
@@ -80,7 +81,6 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return text ? JSON.parse(text) : {} as T;
 }
 
-// ✨ Updated to accept search param
 export function getProducts(params?: { page?: number; size?: number; sort?: string; category?: string; search?: string }) {
   const q = new URLSearchParams({
     page: String(params?.page ?? 0),
