@@ -1,5 +1,6 @@
 // React Native ProductListScreen with Server-side Filtering + Dark Mode Toggle + Grid Layout Toggle
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+// ✨ Fixed: Double request issue resolved by using useRef to track fetch state
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { getProducts, ApiProduct } from '../services/api';
 import { TouchableWithoutFeedback } from 'react-native';
 import {
@@ -45,6 +46,11 @@ export const ProductListScreen: React.FC = () => {
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
 
+  // ✨ Refs to prevent double fetching
+  const isFetchingRef = useRef(false);
+  const lastFetchParamsRef = useRef<string>('');
+  const isInitialMountRef = useRef(true);
+
   // Grid mode: 1, 2, 4 columns (cycles)
   const [gridMode, setGridMode] = useState<1 | 2 | 4>(2);
   
@@ -83,12 +89,14 @@ export const ProductListScreen: React.FC = () => {
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
-      console.log('Setting debounced search query:', searchQuery);
-      setDebouncedSearchQuery(searchQuery);
-      if (searchQuery.trim().length > 0) {
-        addSearchTerm(searchQuery);
+      if (searchQuery !== debouncedSearchQuery) {
+        console.log('Setting debounced search query:', searchQuery);
+        setDebouncedSearchQuery(searchQuery);
+        if (searchQuery.trim().length > 0) {
+          addSearchTerm(searchQuery);
+        }
       }
-    }, 1000);
+    }, 500); // ✨ Reduced from 1000ms to 500ms for better UX
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
@@ -174,8 +182,27 @@ export const ProductListScreen: React.FC = () => {
     setIsSelectionMode(false);
   };
 
+  // ✨ Optimized fetchProducts with duplicate request prevention
   const fetchProducts = useCallback(async (pageNum: number = 0, append: boolean = false) => {
+    // Create a unique key for this request
+    const fetchKey = `${pageNum}-${selectedCategory}-${sortBy}-${debouncedSearchQuery}-${append}`;
+    
+    // ✨ Prevent duplicate requests
+    if (isFetchingRef.current && !append) {
+      console.log('Skipping duplicate fetch request');
+      return;
+    }
+    
+    // ✨ Skip if same params (for non-append requests)
+    if (!append && lastFetchParamsRef.current === fetchKey) {
+      console.log('Skipping fetch - same params as last request');
+      return;
+    }
+
     try {
+      isFetchingRef.current = true;
+      lastFetchParamsRef.current = fetchKey;
+      
       console.log(`Fetching products: page=${pageNum}, search="${debouncedSearchQuery}", category=${selectedCategory}`);
       
       if (!append) {
@@ -213,23 +240,39 @@ export const ProductListScreen: React.FC = () => {
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      isFetchingRef.current = false;
     }
   }, [selectedCategory, sortBy, debouncedSearchQuery]);
 
+  // ✨ Single useEffect for fetching - replaces both useEffect and useFocusEffect
   useEffect(() => {
+    // Skip initial mount to prevent double fetch
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      fetchProducts(0, false);
+      return;
+    }
+    
+    // Fetch on filter/sort/search changes
     fetchProducts(0, false);
   }, [selectedCategory, sortBy, debouncedSearchQuery]);
 
+  // ✨ useFocusEffect only for refetch when returning to screen (optional refresh)
   useFocusEffect(
     useCallback(() => {
-      if (apiProducts.length === 0) {
-        fetchProducts(0, false);
-      }
+      // Only refetch if we have stale data (e.g., returning from another screen)
+      // This is now optional - remove if you don't want auto-refresh on focus
+      // fetchProducts(0, false);
+      
+      // Do nothing - data is already loaded
+      return () => {
+        // Cleanup if needed
+      };
     }, [])
   );
 
   const loadMoreProducts = useCallback(() => {
-    if (!loadingMore && hasMore && !loading) {
+    if (!loadingMore && hasMore && !loading && !isFetchingRef.current) {
       fetchProducts(currentPage + 1, true);
     }
   }, [loadingMore, hasMore, loading, currentPage, fetchProducts]);
@@ -254,15 +297,29 @@ export const ProductListScreen: React.FC = () => {
   };
 
   const handleCategoryChange = (category: string) => {
-    setSelectedCategory(category);
-    if (Platform.OS === 'web') {
-      navigation.setParams({ category } as any);
+    // ✨ Only update if category actually changed
+    if (category !== selectedCategory) {
+      setSelectedCategory(category);
+      if (Platform.OS === 'web') {
+        navigation.setParams({ category } as any);
+      }
+    }
+  };
+
+  // ✨ Handle sort change with duplicate prevention
+  const handleSortChange = (sort: string) => {
+    if (sort !== sortBy) {
+      setSortBy(sort);
     }
   };
 
   // ✨ Reset all filters to default state
   const handleReset = () => {
+    // ✨ Reset lastFetchParams to force a new fetch
+    lastFetchParamsRef.current = '';
+    
     setSearchQuery('');
+    setDebouncedSearchQuery('');
     setSelectedCategory('All');
     setSortBy('name,asc');
     if (Platform.OS === 'web') {
@@ -373,7 +430,8 @@ export const ProductListScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
         
-        <SortFilter selectedSort={sortBy} onSortChange={setSortBy} />
+        {/* ✨ Use handleSortChange instead of setSortBy directly */}
+        <SortFilter selectedSort={sortBy} onSortChange={handleSortChange} />
       </View>
 
       {loading && <ActivityIndicator style={{ marginTop: 16 }} />}
@@ -641,7 +699,8 @@ const styles = StyleSheet.create({
   webMaxWidth: {
     width: '100%',
     maxWidth: 1200,
-    alignSelf: 'center',},
+    alignSelf: 'center',
+  },
 
   floatingBar: {
     position: 'absolute',
@@ -679,4 +738,4 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
   },
-  });
+});

@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 
-// const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com";
-const BASE_URL = "http://192.168.1.6:8080";
+ const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.com";
+//const BASE_URL = "http://192.168.1.6:8080";
 
 const USER_ID_KEY = 'device_user_id';
 
