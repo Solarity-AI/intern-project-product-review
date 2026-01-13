@@ -29,3 +29,14 @@ export interface Review {
   helpfulCount?: number; // ✨ Updated from 'helpful' to 'helpfulCount' to match API
   helpful?: number; // Keep for backward compatibility if needed
 }
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  price: number;
+  image: string;
+  averageRating: number;
+  reviewCount: number;
+  reviews: Review[];
+}

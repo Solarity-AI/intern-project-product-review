@@ -1,8 +1,12 @@
 // React Native ProductListScreen with Server-side Filtering + Dark Mode Toggle + Grid Layout Toggle
 // ✨ Fixed: Double request issue resolved by using useRef to track fetch state
+// ✨ Added: Sort preference persistence with AsyncStorage
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getProducts, ApiProduct } from '../services/api';
 import { TouchableWithoutFeedback } from 'react-native';
+
+const SORT_STORAGE_KEY = 'user_sort_preference';
 import {
   View,
   Text,
@@ -79,6 +83,35 @@ export const ProductListScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('name,asc');
+  const [sortLoaded, setSortLoaded] = useState(false); // ✨ Sort yüklenene kadar bekle
+
+  // ✨ Load saved sort preference on mount
+  useEffect(() => {
+    const loadSortPreference = async () => {
+      try {
+        const savedSort = await AsyncStorage.getItem(SORT_STORAGE_KEY);
+        if (savedSort) {
+          console.log('Loaded sort preference:', savedSort);
+          setSortBy(savedSort);
+        }
+      } catch (error) {
+        console.error('Error loading sort preference:', error);
+      } finally {
+        setSortLoaded(true);
+      }
+    };
+    loadSortPreference();
+  }, []);
+
+  // ✨ Save sort preference when it changes
+  const saveSortPreference = async (sort: string) => {
+    try {
+      await AsyncStorage.setItem(SORT_STORAGE_KEY, sort);
+      console.log('Saved sort preference:', sort);
+    } catch (error) {
+      console.error('Error saving sort preference:', error);
+    }
+  };
 
   useEffect(() => {
     if ((route.params as any)?.category) {
@@ -245,7 +278,13 @@ export const ProductListScreen: React.FC = () => {
   }, [selectedCategory, sortBy, debouncedSearchQuery]);
 
   // ✨ Single useEffect for fetching - replaces both useEffect and useFocusEffect
+  // ✨ Wait for sort preference to load before fetching
   useEffect(() => {
+    // Don't fetch until sort preference is loaded
+    if (!sortLoaded) {
+      return;
+    }
+    
     // Skip initial mount to prevent double fetch
     if (isInitialMountRef.current) {
       isInitialMountRef.current = false;
@@ -255,7 +294,7 @@ export const ProductListScreen: React.FC = () => {
     
     // Fetch on filter/sort/search changes
     fetchProducts(0, false);
-  }, [selectedCategory, sortBy, debouncedSearchQuery]);
+  }, [selectedCategory, sortBy, debouncedSearchQuery, sortLoaded]);
 
   // ✨ useFocusEffect only for refetch when returning to screen (optional refresh)
   useFocusEffect(
@@ -306,10 +345,11 @@ export const ProductListScreen: React.FC = () => {
     }
   };
 
-  // ✨ Handle sort change with duplicate prevention
+  // ✨ Handle sort change with duplicate prevention and persistence
   const handleSortChange = (sort: string) => {
     if (sort !== sortBy) {
       setSortBy(sort);
+      saveSortPreference(sort); // ✨ Save to AsyncStorage
     }
   };
 

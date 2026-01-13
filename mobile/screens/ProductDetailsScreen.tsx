@@ -32,9 +32,20 @@ import { ToastProvider, useToast } from '../context/ToastContext';
 
 import { RootStackParamList, Review } from '../types';
 import { Spacing, FontSize, FontWeight, BorderRadius, Shadow } from '../constants/theme';
-import { getProduct, postReview, getReviews, markReviewAsHelpful, getUserVotedReviews } from '../services/api';
+import { getProduct, postReview, getReviews, markReviewAsHelpful, getUserVotedReviews, ApiReview } from '../services/api';
 
 type RouteType = RouteProp<RootStackParamList, 'ProductDetails'>;
+
+// ✨ Helper function to convert ApiReview to Review
+const mapApiReviewToReview = (apiReview: ApiReview, productId: string): Review => ({
+  id: String(apiReview.id ?? Date.now()),
+  productId: productId,
+  userName: apiReview.reviewerName || 'Anonymous',
+  rating: apiReview.rating,
+  comment: apiReview.comment,
+  createdAt: apiReview.createdAt || new Date().toISOString(),
+  helpfulCount: apiReview.helpfulCount ?? 0,
+});
 
 const ProductDetailsContent: React.FC = () => {
   const route = useRoute<RouteType>();
@@ -105,7 +116,10 @@ const ProductDetailsContent: React.FC = () => {
         rating: selectedRating
       });
 
-      const newReviews = reviewsData.content || [];
+      // ✨ Convert ApiReview[] to Review[]
+      const newReviews: Review[] = (reviewsData.content || []).map(
+        (apiReview: ApiReview) => mapApiReviewToReview(apiReview, productId)
+      );
       
       if (append) {
         setReviews(prev => [...prev, ...newReviews]);
