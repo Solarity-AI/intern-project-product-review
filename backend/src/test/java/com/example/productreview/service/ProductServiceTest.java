@@ -6,6 +6,7 @@ import com.example.productreview.model.Product;
 import com.example.productreview.model.Review;
 import com.example.productreview.repository.ProductRepository;
 import com.example.productreview.repository.ReviewRepository;
+import com.example.productreview.repository.ReviewVoteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,9 @@ public class ProductServiceTest {
 
     @Mock
     private ReviewRepository reviewRepository;
+    
+    @Mock
+    private ReviewVoteRepository reviewVoteRepository;
     
     @Mock
     private AISummaryService aiSummaryService;
@@ -63,7 +67,8 @@ public class ProductServiceTest {
         Page<Product> productPage = new PageImpl<>(Arrays.asList(product));
         when(productRepository.findAll(pageable)).thenReturn(productPage);
 
-        Page<ProductDTO> result = productService.getAllProducts(null, pageable);
+        // ✨ Updated: Added null for search parameter
+        Page<ProductDTO> result = productService.getAllProducts(null, null, pageable);
 
         assertNotNull(result);
         assertEquals(1, result.getContent().size());

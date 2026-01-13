@@ -4,6 +4,8 @@ import com.example.productreview.dto.ProductDTO;
 import com.example.productreview.dto.ReviewDTO;
 import com.example.productreview.service.ProductService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,6 +20,8 @@ import java.util.Map;
 @RequestMapping("/api/products")
 @CrossOrigin(origins = "*")
 public class ProductController {
+    
+    private static final Logger log = LoggerFactory.getLogger(ProductController.class);
 
     private final ProductService productService;
 
@@ -28,9 +32,12 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<Page<ProductDTO>> getAllProducts(
             @RequestParam(required = false) String category,
+            @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "name,asc") String sort) {
+        
+        log.info("getAllProducts called with category: {}, search: {}", category, search);
         
         String[] sortParams = sort.split(",");
         Sort.Direction direction = sortParams.length > 1 && sortParams[1].equalsIgnoreCase("desc") 
@@ -38,7 +45,7 @@ public class ProductController {
         
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortParams[0]));
         
-        return ResponseEntity.ok(productService.getAllProducts(category, pageable));
+        return ResponseEntity.ok(productService.getAllProducts(category, search, pageable));
     }
 
     @GetMapping("/{id}")
@@ -79,7 +86,6 @@ public class ProductController {
         return ResponseEntity.ok(productService.markReviewAsHelpful(reviewId, userId));
     }
     
-    // ✨ New Endpoint to get user's voted reviews
     @GetMapping("/reviews/voted")
     public ResponseEntity<List<Long>> getUserVotedReviews(@RequestHeader("X-User-ID") String userId) {
         return ResponseEntity.ok(productService.getUserVotedReviewIds(userId));

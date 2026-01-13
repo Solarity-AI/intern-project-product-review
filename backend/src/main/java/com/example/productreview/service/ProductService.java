@@ -9,7 +9,8 @@ import org.springframework.data.domain.Pageable;
 import java.util.List;
 
 public interface ProductService {
-    Page<ProductDTO> getAllProducts(String category, Pageable pageable);
+    // Updated to accept search query
+    Page<ProductDTO> getAllProducts(String category, String search, Pageable pageable);
     
     ProductDTO getProductDTOById(Long id);
     
@@ -21,10 +22,8 @@ public interface ProductService {
     
     ReviewDTO addReview(Long productId, ReviewDTO reviewDTO);
     
-    // Updated to accept userId
     ReviewDTO markReviewAsHelpful(Long reviewId, String userId);
     
-    // New method to get user's voted review IDs
     List<Long> getUserVotedReviewIds(String userId);
 
     String chatAboutProduct(Long productId, String question);

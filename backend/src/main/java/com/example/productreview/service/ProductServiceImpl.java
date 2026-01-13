@@ -42,13 +42,29 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public Page<ProductDTO> getAllProducts(String category, Pageable pageable) {
-        if (category != null && !category.isEmpty() && !category.equalsIgnoreCase("All")) {
+    public Page<ProductDTO> getAllProducts(String category, String search, Pageable pageable) {
+        boolean hasCategory = category != null && !category.isEmpty() && !category.equalsIgnoreCase("All");
+        boolean hasSearch = search != null && !search.trim().isEmpty();
+        
+        log.info("Service getAllProducts: hasCategory={}, hasSearch={}, search='{}'", hasCategory, hasSearch, search);
+
+        if (hasCategory && hasSearch) {
+            log.info("Searching by Category AND Name");
+            return productRepository.findByCategoryAndNameContainingIgnoreCase(category, search, pageable)
+                    .map(this::convertToProductDTO);
+        } else if (hasCategory) {
+            log.info("Searching by Category");
             return productRepository.findByCategory(category, pageable)
                     .map(this::convertToProductDTO);
+        } else if (hasSearch) {
+            log.info("Searching by Name");
+            return productRepository.findByNameContainingIgnoreCase(search, pageable)
+                    .map(this::convertToProductDTO);
+        } else {
+            log.info("Returning ALL products");
+            return productRepository.findAll(pageable)
+                    .map(this::convertToProductDTO);
         }
-        return productRepository.findAll(pageable)
-                .map(this::convertToProductDTO);
     }
 
     @Override
@@ -138,18 +154,15 @@ public class ProductServiceImpl implements ProductService {
             Optional<ReviewVote> existingVote = reviewVoteRepository.findByUserIdAndReviewId(userId, reviewId);
             
             if (existingVote.isPresent()) {
-                // ✨ Toggle OFF: Remove vote and decrease count
                 reviewVoteRepository.delete(existingVote.get());
                 if (review.getHelpfulCount() > 0) {
                     review.setHelpfulCount(review.getHelpfulCount() - 1);
                 }
             } else {
-                // ✨ Toggle ON: Add vote and increase count
                 reviewVoteRepository.save(new ReviewVote(userId, reviewId));
                 review.setHelpfulCount(review.getHelpfulCount() + 1);
             }
         } else {
-            // Fallback for anonymous (shouldn't happen with new frontend)
             review.setHelpfulCount(review.getHelpfulCount() + 1);
         }
         
