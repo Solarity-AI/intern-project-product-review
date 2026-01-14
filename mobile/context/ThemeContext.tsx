@@ -20,7 +20,7 @@ interface ThemeContextType {
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// ✨ Fallback colors matching theme.ts
+// ✨ Background colors for preventing white flash
 const THEME_BACKGROUNDS = {
   light: '#FDFBF8',
   dark: '#0C0A09',
@@ -62,12 +62,17 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     };
   }, []);
 
-  // ✨ Update Android navigation bar
+  // ✨ Update Android navigation bar (safely with edge-to-edge)
   useEffect(() => {
     if (Platform.OS === 'android' && isThemeLoaded) {
-      const bgColor = THEME_BACKGROUNDS[colorScheme];
-      NavigationBar.setBackgroundColorAsync(bgColor);
-      NavigationBar.setButtonStyleAsync(colorScheme === 'dark' ? 'light' : 'dark');
+      try {
+        // setBackgroundColorAsync is not supported with edge-to-edge enabled
+        // Only set button style for better compatibility
+        NavigationBar.setButtonStyleAsync(colorScheme === 'dark' ? 'light' : 'dark');
+      } catch (error) {
+        // Silently fail - edge-to-edge may prevent this operation
+        console.debug('NavigationBar update skipped due to edge-to-edge:', error);
+      }
     }
   }, [colorScheme, isThemeLoaded]);
 

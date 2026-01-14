@@ -90,76 +90,107 @@ export const WishlistProvider: React.FC<{ children: ReactNode }> = ({ children }
   const wishlistCount = wishlist.length;
 
   const isInWishlist = useCallback(
-    (productId: string) => {
-      return wishlist.some((item) => item.id === productId);
+    (productId: string | number) => {
+      const idStr = String(productId);
+      return wishlist.some((item) => String(item.id) === idStr);
     },
     [wishlist]
   );
 
   const addToWishlist = useCallback(
     (product: Omit<WishlistItem, 'addedAt'>) => {
-      const newItem: WishlistItem = {
-        ...product,
-        addedAt: new Date(),
-      };
-      
-      const updated = [newItem, ...wishlist];
-      setWishlist(updated);
-      saveWishlistToStorage(updated);
-      
-      // Sync with Backend
-      toggleWishlistApi(Number(product.id)).catch(e => console.error("Backend sync failed", e));
+      setWishlist(currentWishlist => {
+        const idStr = String(product.id);
+        if (currentWishlist.some(item => String(item.id) === idStr)) {
+          return currentWishlist;
+        }
+
+        const newItem: WishlistItem = {
+          ...product,
+          id: idStr,
+          addedAt: new Date(),
+        };
+        
+        const updated = [newItem, ...currentWishlist];
+        saveWishlistToStorage(updated);
+        
+        // Sync with Backend
+        toggleWishlistApi(Number(idStr)).catch(e => console.error("Backend sync failed", e));
+        return updated;
+      });
     },
-    [wishlist]
+    []
   );
 
   const addMultipleToWishlist = useCallback(
     (products: Array<Omit<WishlistItem, 'addedAt'>>) => {
-      const existingIds = new Set(wishlist.map(item => item.id));
-      const newItems = products
-        .filter(p => !existingIds.has(p.id))
-        .map(p => ({
-          ...p,
-          addedAt: new Date(),
-        }));
-      
-      const updated = [...newItems, ...wishlist];
-      setWishlist(updated);
-      saveWishlistToStorage(updated);
-      
-      // Sync each item (Parallel)
-      newItems.forEach(item => {
-        toggleWishlistApi(Number(item.id)).catch(e => console.error("Backend sync failed", e));
+      setWishlist(currentWishlist => {
+        const existingIds = new Set(currentWishlist.map(item => String(item.id)));
+        const uniqueNewProducts = Array.from(new Map(products.map(p => [String(p.id), p])).values());
+        
+        const newItems = uniqueNewProducts
+          .filter(p => !existingIds.has(String(p.id)))
+          .map(p => ({
+            ...p,
+            id: String(p.id),
+            addedAt: new Date(),
+          }));
+        
+        if (newItems.length === 0) return currentWishlist;
+
+        const updated = [...newItems, ...currentWishlist];
+        saveWishlistToStorage(updated);
+        
+        // Sync each item (Parallel)
+        newItems.forEach(item => {
+          toggleWishlistApi(Number(item.id)).catch(e => console.error("Backend sync failed", e));
+        });
+
+        return updated;
       });
     },
-    [wishlist]
+    []
   );
 
   const removeFromWishlist = useCallback(
-    (productId: string) => {
-      const updated = wishlist.filter((item) => item.id !== productId);
-      setWishlist(updated);
-      saveWishlistToStorage(updated);
-      
-      // Sync with Backend
-      toggleWishlistApi(Number(productId)).catch(e => console.error("Backend sync failed", e));
+    (productId: string | number) => {
+      setWishlist(currentWishlist => {
+        const idStr = String(productId);
+        if (!currentWishlist.some(item => String(item.id) === idStr)) {
+          return currentWishlist;
+        }
+
+        const updated = currentWishlist.filter((item) => String(item.id) !== idStr);
+        saveWishlistToStorage(updated);
+        
+        // Sync with Backend
+        toggleWishlistApi(Number(idStr)).catch(e => console.error("Backend sync failed", e));
+        return updated;
+      });
     },
-    [wishlist]
+    []
   );
 
   const removeMultipleFromWishlist = useCallback(
-    (productIds: string[]) => {
-      const idsSet = new Set(productIds);
-      const updated = wishlist.filter((item) => !idsSet.has(item.id));
-      setWishlist(updated);
-      saveWishlistToStorage(updated);
-      
-      // Sync each item
-      productIds.forEach(id => {
-        toggleWishlistApi(Number(id)).catch(e => console.error("Backend sync failed", e));
+    (productIds: Array<string | number>) => {
+      setWishlist(currentWishlist => {
+        const idsSet = new Set(productIds.map(String));
+        const toRemove = currentWishlist.filter(item => idsSet.has(String(item.id)));
+        
+        if (toRemove.length === 0) return currentWishlist;
+
+        const updated = currentWishlist.filter((item) => !idsSet.has(String(item.id)));
+        saveWishlistToStorage(updated);
+        
+        // Sync each item
+        toRemove.forEach(item => {
+          toggleWishlistApi(Number(item.id)).catch(e => console.error("Backend sync failed", e));
+        });
+
+        return updated;
       });
     },
-    [wishlist]
+    []
   );
 
   const toggleWishlist = useCallback(
