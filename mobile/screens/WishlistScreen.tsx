@@ -1,336 +1,354 @@
-// WishlistScreen - Display user's favorite products
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
   FlatList,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
   useWindowDimensions,
   Platform,
   TouchableWithoutFeedback,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenWrapper } from '../components/ScreenWrapper';
 import { SelectableWishlistCard } from '../components/SelectableWishlistCard';
+
 import { useWishlist, WishlistItem } from '../context/WishlistContext';
 import { useTheme } from '../context/ThemeContext';
-import { RootStackParamList } from '../types';
-import {
-  Spacing,
-  FontSize,
-  FontWeight,
-  BorderRadius,
-  Shadow,
-} from '../constants/theme';
 
-export const WishlistScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { colors } = useTheme();
-  const { wishlist, removeFromWishlist, removeMultipleFromWishlist, clearWishlist } = useWishlist();
+import { RootStackParamList } from '../types';
+import { BorderRadius, FontSize, FontWeight, Spacing } from '../constants/theme';
+
+type WishlistNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Wishlist'>;
+
+const GRID_STORAGE_KEY = 'wishlist_grid_mode';
+
+export const WishlistScreen = () => {
+  const navigation = useNavigation<WishlistNavigationProp>();
+  const { colors, colorScheme, toggleTheme } = useTheme();
+  const { wishlist, removeFromWishlist, clearWishlist, addMultipleToWishlist } = useWishlist();
 
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
+  const webBp = !isWeb ? 'mobile' : width < 720 ? 'narrow' : width < 1100 ? 'medium' : 'wide';
 
-  // Grid mode toggle
+  // Web’de daha büyük ikon + buton
+  const headerIconSize = isWeb ? (webBp === 'wide' ? 26 : 24) : 20;
+  const headerIconSizeBig = isWeb ? (webBp === 'wide' ? 28 : 26) : 22;
+
+  // Grid mode: 1 / 2 / 4
   const [gridMode, setGridMode] = useState<1 | 2 | 4>(2);
-  
-  // Multi-select mode
-  const [isSelectionMode, setIsSelectionMode] = useState(false);
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  
   const numColumns = gridMode;
 
-  // Load saved grid mode
+  const gridTouchedRef = useRef(false);
+
+  // Web auto-grid (kullanıcı grid toggle’a basarsa auto kapanır)
   useEffect(() => {
-    loadGridMode();
+    if (!isWeb) return;
+    if (gridTouchedRef.current) return;
+
+    const next: 1 | 2 | 4 = width < 720 ? 1 : width < 1100 ? 2 : 4;
+    if (gridMode !== next) setGridMode(next);
+  }, [isWeb, width, gridMode]);
+
+  // Grid preference load/save (mobilde anlamlı, webde de bozmuyor)
+  const loadGridPreference = useCallback(async () => {
+    try {
+      const stored = await AsyncStorage.getItem(GRID_STORAGE_KEY);
+      const parsed = stored ? (Number(stored) as 1 | 2 | 4) : null;
+      if (parsed === 1 || parsed === 2 || parsed === 4) {
+        setGridMode(parsed);
+      }
+    } catch {
+      // no-op
+    }
   }, []);
 
-  const loadGridMode = async () => {
+  const saveGridPreference = useCallback(async (value: 1 | 2 | 4) => {
     try {
-      const saved = await AsyncStorage.getItem('wishlist_grid_mode');
-      if (saved === '1' || saved === '2' || saved === '4') {
-        setGridMode(parseInt(saved) as 1 | 2 | 4);
-      }
-    } catch (error) {
-      console.error('Error loading grid mode:', error);
+      await AsyncStorage.setItem(GRID_STORAGE_KEY, String(value));
+    } catch {
+      // no-op
     }
-  };
+  }, []);
 
-  const saveGridMode = async (mode: 1 | 2 | 4) => {
-    try {
-      await AsyncStorage.setItem('wishlist_grid_mode', String(mode));
-    } catch (error) {
-      console.error('Error saving grid mode:', error);
-    }
-  };
+  useEffect(() => {
+    loadGridPreference();
+  }, [loadGridPreference]);
 
   const toggleGridMode = () => {
+    gridTouchedRef.current = true;
     setGridMode(prev => {
       const next = prev === 1 ? 2 : prev === 2 ? 4 : 1;
-      saveGridMode(next);
+      saveGridPreference(next);
       return next;
     });
   };
 
-  const getGridIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (gridMode === 1) return 'list';
-    if (gridMode === 2) return 'grid';
-    return 'apps';
-  };
+  // Multi-select mode
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
 
-  // ✨ Improved back handler for Web/Deep Links
-  const handleBack = () => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate('ProductList' as any);
-    }
-  };
-
-  // Selection handlers
-  const handleCardPress = (item: WishlistItem) => {
-    if (isSelectionMode) {
-      const newSelected = new Set(selectedItems);
-      if (newSelected.has(item.id)) {
-        newSelected.delete(item.id);
-      } else {
-        newSelected.add(item.id);
-      }
-      setSelectedItems(newSelected);
-      if (newSelected.size === 0) {
-        setIsSelectionMode(false);
-      }
-    } else {
-      navigation.navigate('ProductDetails', {
-        productId: item.id,
-        imageUrl: item.imageUrl,
-        name: item.name,
-      } as any);
-    }
+  const handleCancelSelection = () => {
+    setIsSelectionMode(false);
+    setSelectedItems(new Set());
   };
 
   const handleCardLongPress = (item: WishlistItem) => {
+    const id = String((item as any)?.id ?? '');
+    if (!id) return;
+
     setIsSelectionMode(true);
-    setSelectedItems(new Set([item.id]));
+    setSelectedItems(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
   };
 
-  // Bulk remove selected items from wishlist (professional method name)
-  const handleRemoveMultiple = () => {
-    // Convert Set to Array for processing
-    const selectedIds = Array.from(selectedItems);
-    
-    // Remove all selected items in one optimized batch
-    removeMultipleFromWishlist(selectedIds);
-    
-    // Reset selection state
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
+  const handleCardPress = (item: WishlistItem) => {
+    const id = String((item as any)?.id ?? '');
+    if (!id) return;
+
+    if (isSelectionMode) {
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+
+        if (next.size === 0) setIsSelectionMode(false);
+        return next;
+      });
+      return;
+    }
+
+    navigation.navigate('ProductDetails', { productId: (item as any)?.id });
   };
 
-  const handleCancelSelection = () => {
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
+  const handleRemoveSelected = () => {
+    selectedItems.forEach(id => removeFromWishlist(id));
+    handleCancelSelection();
   };
 
-  // FIX: Wrap item properly for column layout
-  const renderWishlistItem = ({ item }: { item: WishlistItem }) => (
-    <View style={numColumns > 1 ? styles.gridItemWrapper : styles.listItemWrapper}>
-      <SelectableWishlistCard
-        item={item}
-        isSelectionMode={isSelectionMode}
-        isSelected={selectedItems.has(item.id)}
-        onPress={handleCardPress}
-        onLongPress={handleCardLongPress}
-        onRemove={removeFromWishlist}
-      />
-    </View>
-  );
+  const stats = useMemo(() => {
+    const itemCount = wishlist.length;
+    const totalPrice = wishlist.reduce((sum, item: any) => sum + (Number(item?.price) || 0), 0);
+    return { itemCount, totalPrice };
+  }, [wishlist]);
 
-  const renderEmpty = () => (
+  const renderWishlistItem = ({ item, index }: { item: WishlistItem; index: number }) => {
+    const id = String((item as any)?.id ?? '');
+    const selected = selectedItems.has(id);
+
+    // ✅ Android 4-col kayma fix: width + item padding ile kontrol
+
+    const isGrid = numColumns > 1;
+    const colIndex = isGrid ? index % numColumns : 0;
+
+    return (
+      <View
+        style={[
+          isGrid ? styles.gridItemWrapper : styles.listItemWrapper,
+          isGrid && {
+            width: `${100 / numColumns}%`,
+            maxWidth: `${100 / numColumns}%`,
+          },
+          // ✅ spacing: sadece sağa margin ver, satırın son item’ında verme
+          isGrid && {
+            paddingHorizontal: 0, // ✅ gridItemWrapper padding’ini ez
+            marginRight: colIndex === numColumns - 1 ? 0 : Spacing.sm,
+            marginBottom: Spacing.sm,
+          },
+        ]}
+      >
+
+        <SelectableWishlistCard
+          item={item}
+          numColumns={numColumns}
+          isSelectionMode={isSelectionMode}
+          isSelected={selected}
+          onPress={handleCardPress}
+          onLongPress={handleCardLongPress}
+          onRemove={(id) => removeFromWishlist(id)}
+        />
+      </View>
+    );
+  };
+
+  const emptyState = (
     <View style={styles.emptyContainer}>
-      <View style={[styles.emptyIconContainer, { backgroundColor: colors.muted }]}>
-        <Ionicons name="heart-outline" size={64} color={colors.mutedForeground} />
+      <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
+        <Ionicons name="heart-outline" size={44} color={colors.mutedForeground} />
       </View>
       <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Your wishlist is empty</Text>
       <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-        Start adding your favorite products to see them here
+        Save products you love and find them here later.
       </Text>
+
       <TouchableOpacity
         style={[styles.emptyButton, { backgroundColor: colors.primary }]}
         onPress={() => navigation.navigate('ProductList')}
-        activeOpacity={0.8}
+        activeOpacity={0.85}
       >
-        <Text style={[styles.emptyButtonText, { color: colors.primaryForeground }]}>
-          Browse Products
-        </Text>
+        <Ionicons name="search" size={18} color={colors.primaryForeground} />
+        <Text style={[styles.emptyButtonText, { color: colors.primaryForeground }]}>Browse products</Text>
       </TouchableOpacity>
     </View>
   );
 
-  const stats = useMemo(() => {
-    const totalPrice = wishlist.reduce((sum, item) => sum + (item.price || 0), 0);
-    const avgRating = wishlist.reduce((sum, item) => sum + (item.averageRating || 0), 0) / wishlist.length;
-    return {
-      itemCount: wishlist.length,
-      avgRating: isNaN(avgRating) ? 0 : avgRating,
-      totalPrice,
-    };
-  }, [wishlist]);
-
-  const renderStatsHeader = () => (
-    <View>
-      {wishlist.length > 0 && (
-        <View style={[styles.statsSection, { backgroundColor: colors.secondary }]}>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
-                <Ionicons name="cube" size={20} color={colors.primaryForeground} />
-              </LinearGradient>
-              <View>
-                <Text style={[styles.statValue, { color: colors.foreground }]}>
-                  {stats.itemCount}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  Items
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.statItem}>
-              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
-                <Ionicons name="star" size={20} color={colors.primaryForeground} />
-              </LinearGradient>
-              <View>
-                <Text style={[styles.statValue, { color: colors.foreground }]}>
-                  {stats.avgRating.toFixed(1)}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  Avg Rating
-                </Text>
-              </View>
-            </View>
-
-            <View style={styles.statItem}>
-              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
-                <Ionicons name="cash" size={20} color={colors.primaryForeground} />
-              </LinearGradient>
-              <View>
-                <Text style={[styles.statValue, { color: colors.foreground }]}>
-                  ${stats.totalPrice.toFixed(0)}
-                </Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>
-                  Total
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-      )}
-    </View>
-  );
-
-  const renderListHeader = () => (
-    <View>
-      {/* Header */}
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <View style={styles.headerLeft}>
-          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-            <Ionicons name="arrow-back" size={22} color={colors.foreground} />
-          </TouchableOpacity>
-          <View>
-            <Text style={[styles.headerTitle, { color: colors.foreground }]}>My Wishlist</Text>
-            {wishlist.length > 0 && (
-              <Text style={[styles.headerSubtitle, { color: colors.mutedForeground }]}>
-                {wishlist.length} {wishlist.length === 1 ? 'item' : 'items'}
-              </Text>
-            )}
-          </View>
-        </View>
-
-        {/* Header actions */}
-        <View style={styles.headerActions}>
-          {/* Grid Toggle Button */}
-          {wishlist.length > 0 && (
-            <TouchableOpacity
-              onPress={toggleGridMode}
-              style={[styles.gridToggleButton, { backgroundColor: colors.secondary }]}
-              activeOpacity={0.8}
-            >
-              <Ionicons name={getGridIcon()} size={20} color={colors.foreground} />
-            </TouchableOpacity>
-          )}
-
-          {/* Clear all button */}
-          {wishlist.length > 0 && (
-            <TouchableOpacity 
-              onPress={clearWishlist} 
-              activeOpacity={0.8}
-              style={[styles.clearAllButton, { backgroundColor: colors.destructive }]}
-            >
-              <Ionicons name="trash-outline" size={16} color="#fff" />
-              <Text style={styles.clearAllText}>Clear all</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
-
-      {renderStatsHeader()}
-    </View>
-  );
-
   return (
-    <ScreenWrapper backgroundColor={colors.background}>
-      <TouchableWithoutFeedback 
+    <ScreenWrapper>
+      <TouchableWithoutFeedback
         onPress={() => {
-          if (isSelectionMode && selectedItems.size > 0) {
-            handleCancelSelection();
-          }
+          if (isSelectionMode && selectedItems.size > 0) handleCancelSelection();
         }}
       >
         <View style={{ flex: 1 }}>
-          <FlatList
-            data={wishlist}
-            key={`${numColumns}-${isSelectionMode ? 'select' : 'normal'}`}
-            numColumns={numColumns}
-            keyExtractor={(item) => item.id}
-            renderItem={renderWishlistItem}
-            ListHeaderComponent={renderListHeader}
-            ListEmptyComponent={renderEmpty}
-            contentContainerStyle={[
-              styles.listContent,
-              isWeb && styles.webMaxWidth,
-            ]}
-            columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
-            showsVerticalScrollIndicator={false}
-          />
-
-          {/* Floating action bar */}
-          {isSelectionMode && selectedItems.size > 0 && (
-            <View style={[styles.floatingBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          {/* Header */}
+          <View style={isWeb ? styles.webPageContainer : undefined}>
+            <View style={[styles.header, { backgroundColor: colors.background }, isWeb && styles.headerWeb]}>
               <TouchableOpacity
-                style={[styles.floatingButton, styles.cancelButton]}
-                onPress={handleCancelSelection}
-                activeOpacity={0.8}
+                style={[styles.brand, isWeb && styles.brandWeb]}
+                onPress={() => navigation.navigate('ProductList')}
+                activeOpacity={0.85}
               >
-                <Text style={[styles.floatingButtonText, { color: colors.foreground }]}>
-                  Cancel
-                </Text>
+                <LinearGradient colors={[colors.primary, colors.accent]} style={styles.brandIcon}>
+                  <Ionicons name="star" size={16} color={colors.primaryForeground} />
+                </LinearGradient>
+                <Text style={[styles.brandText, { color: colors.foreground }]}>ProductReview</Text>
               </TouchableOpacity>
 
+              <View style={styles.headerActions}>
+                <TouchableOpacity
+                  style={[
+                    styles.headerButton,
+                    isWeb && styles.headerButtonWeb,
+                    { backgroundColor: colors.secondary },
+                  ]}
+                  onPress={toggleTheme}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name={colorScheme === 'dark' ? 'sunny' : 'moon'}
+                    size={headerIconSize}
+                    color={colors.foreground}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.headerButton,
+                    isWeb && styles.headerButtonWeb,
+                    { backgroundColor: colors.secondary },
+                  ]}
+                  onPress={toggleGridMode}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons
+                    name={gridMode === 1 ? 'list' : gridMode === 2 ? 'grid-outline' : 'grid'}
+                    size={headerIconSize}
+                    color={colors.foreground}
+                  />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.headerButton,
+                    isWeb && styles.headerButtonWeb,
+                    { backgroundColor: colors.secondary },
+                  ]}
+                  onPress={() => clearWishlist()}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="trash-outline" size={headerIconSizeBig} color={colors.foreground} />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Stats */}
+            {wishlist.length > 0 && (
+              <View style={[styles.statsSection, { backgroundColor: colors.secondary }, isWeb && styles.statsSectionWeb]}>
+                <View style={styles.statsRow}>
+                  <View style={styles.statItem}>
+                    <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
+                      <Ionicons name="cube" size={20} color={colors.primaryForeground} />
+                    </LinearGradient>
+                    <View>
+                      <Text style={[styles.statValue, { color: colors.foreground }]}>{stats.itemCount}</Text>
+                      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Items</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.statItem}>
+                    <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
+                      <Ionicons name="cash" size={20} color={colors.primaryForeground} />
+                    </LinearGradient>
+                    <View>
+                      <Text style={[styles.statValue, { color: colors.foreground }]}>
+                        ${stats.totalPrice.toFixed(0)}
+                      </Text>
+                      <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Total</Text>
+                    </View>
+                  </View>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Content */}
+          {wishlist === undefined ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Loading wishlist...</Text>
+            </View>
+          ) : wishlist.length === 0 ? (
+            emptyState
+          ) : (
+            <FlatList
+              data={wishlist}
+              key={numColumns}
+              numColumns={numColumns}
+              keyExtractor={(item: any) => String(item?.id ?? '')}
+              renderItem={renderWishlistItem}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              contentContainerStyle={[
+                styles.listContent,
+                isWeb && styles.webListContent,
+              ]}
+              // ✅ Android 4-col kayma fix: gap yerine space-between
+              columnWrapperStyle={
+                numColumns > 1
+                  ? [
+                    styles.columnWrapper,
+                    { justifyContent: 'flex-start' }, // ✅ space-between KALKSIN
+                    isWeb && styles.columnWrapperWeb,
+                  ]
+                  : undefined
+              }
+
+            />
+          )}
+
+          {/* Floating bottom bar for selection mode */}
+          {isSelectionMode && selectedItems.size > 0 && (
+            <View style={[styles.floatingBar, { backgroundColor: colors.card }]}>
               <TouchableOpacity
-                style={[styles.floatingButton, styles.deleteButton, { backgroundColor: colors.destructive }]}
-                onPress={handleRemoveMultiple}
-                activeOpacity={0.8}
+                style={[styles.floatingButton, { backgroundColor: colors.destructive }]}
+                onPress={handleRemoveSelected}
+                activeOpacity={0.9}
               >
-                <Ionicons name="trash-outline" size={18} color="#fff" />
+                <Ionicons name="trash" size={18} color="#fff" />
                 <Text style={[styles.floatingButtonText, { color: '#fff' }]}>
-                  Delete ({selectedItems.size})
+                  Remove ({selectedItems.size})
                 </Text>
               </TouchableOpacity>
             </View>
@@ -342,145 +360,177 @@ export const WishlistScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  // ✅ Web container (full width + split view)
+  webPageContainer: {
+    width: '100%',
+    maxWidth: 1200,
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+
   header: {
+    paddingTop: Spacing.md,
+    paddingBottom: Spacing.md,
+    paddingHorizontal: Spacing.lg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
   },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+
+  headerWeb: {
+    paddingHorizontal: 0, // webPageContainer handles padding
   },
-  backButton: {
-    padding: Spacing.xs,
+
+  brand: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+
+  brandWeb: {
+    paddingVertical: 4,
   },
-  headerTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-  },
-  headerSubtitle: {
-    fontSize: FontSize.xs,
-    marginTop: 2,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  gridToggleButton: {
-    width: 36,
-    height: 36,
+
+  brandIcon: {
+    width: 32,
+    height: 32,
     borderRadius: BorderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  clearAllButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    borderRadius: BorderRadius.lg,
-  },
-  clearAllText: {
-    color: '#fff',
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
-  },
 
-  statsSection: {
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.xl,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  statIcon: {
+  brandText: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+
+  headerButton: {
     width: 40,
     height: 40,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  statValue: {
-    fontSize: FontSize.lg,
-    fontWeight: FontWeight.bold,
+
+  headerButtonWeb: {
+    width: 46,
+    height: 46,
   },
-  statLabel: {
-    fontSize: FontSize.xs,
+
+  statsSection: {
+    marginHorizontal: Spacing.lg,
+    marginBottom: Spacing.lg,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.lg,
   },
+
+  statsSectionWeb: {
+    marginHorizontal: 0,
+  },
+
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+
+  statItem: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
+
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: BorderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
+
+  statLabel: { fontSize: FontSize.sm },
 
   listContent: {
-    paddingBottom: Spacing['3xl'],
-  },
-  columnWrapper: {
-    paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
-    marginTop: Spacing.md,
-  },
-  
-  // FIX: Proper wrapper for grid items
-  gridItemWrapper: {
-    flex: 1,
-    maxWidth: '50%', // Will be overridden by flex
-  },
-  listItemWrapper: {
-    paddingHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
+    paddingBottom: Spacing['5xl'] + Spacing.xl,
   },
 
-  webMaxWidth: {
+  webListContent: {
     width: '100%',
     maxWidth: 1200,
     alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingBottom: Spacing['5xl'] + Spacing.xl,
+  },
+
+  columnWrapper: {
+    paddingHorizontal: Spacing.lg,
+    justifyContent: 'flex-start', // ✅ space-between değil
+  },
+
+
+  columnWrapperWeb: {
+    paddingHorizontal: 0, // webListContent already has padding
+  },
+
+  // ✅ item wrapper: gap yerine padding (Android daha stabil)
+  gridItemWrapper: {
+    paddingVertical: Spacing.sm, // yatay padding'i kaldır
+  },
+
+
+
+  gridItemPad: {
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.sm,
+  },
+
+  listItemWrapper: {
+    paddingVertical: Spacing.sm,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing['2xl'],
+  },
+
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
   },
 
   emptyContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: Spacing['5xl'],
-    paddingHorizontal: Spacing['2xl'],
-    gap: Spacing.md,
+    padding: Spacing['2xl'],
   },
-  emptyIconContainer: {
-    width: 120,
-    height: 120,
+
+  emptyIcon: {
+    width: 96,
+    height: 96,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.md,
+    marginBottom: Spacing.lg,
   },
+
   emptyTitle: {
     fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
   },
+
   emptySubtitle: {
     fontSize: FontSize.base,
     textAlign: 'center',
-    marginBottom: Spacing.lg,
+    marginBottom: Spacing.xl,
+    paddingHorizontal: Spacing.lg,
   },
+
   emptyButton: {
-    paddingVertical: Spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
     paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
   },
+
   emptyButtonText: {
     fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
@@ -488,34 +538,25 @@ const styles = StyleSheet.create({
 
   floatingBar: {
     position: 'absolute',
-    bottom: Spacing.xl,
-    left: Spacing.lg,
-    right: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    ...Shadow.soft,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: Spacing.lg,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
   },
+
   floatingButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
+    gap: Spacing.sm,
     paddingVertical: Spacing.md,
     borderRadius: BorderRadius.lg,
   },
-  cancelButton: {
-    backgroundColor: 'transparent',
-  },
-  deleteButton: {
-    // backgroundColor set inline
-  },
+
   floatingButtonText: {
-    fontSize: FontSize.sm,
+    fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
   },
 });

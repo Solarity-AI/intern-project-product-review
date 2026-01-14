@@ -23,6 +23,7 @@ interface SelectableWishlistCardProps {
   onLongPress: (item: WishlistItem) => void;
   onRemove: (id: string) => void;
   width?: string;
+  numColumns?: 1 | 2 | 4;
 }
 
 export const SelectableWishlistCard: React.FC<SelectableWishlistCardProps> = ({
@@ -32,10 +33,12 @@ export const SelectableWishlistCard: React.FC<SelectableWishlistCardProps> = ({
   onPress,
   onLongPress,
   onRemove,
-  width = '100%',
+  numColumns = 2, // ✅ EKLE
+  width,
 }) => {
+
   const { colors } = useTheme();
-  
+
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {

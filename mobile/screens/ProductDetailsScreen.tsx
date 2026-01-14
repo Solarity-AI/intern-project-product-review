@@ -10,6 +10,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  useWindowDimensions,
+  Platform,
 } from 'react-native';
 import { useRoute, useNavigation, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -54,6 +56,18 @@ const ProductDetailsContent: React.FC = () => {
   const { showToast } = useToast();
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { addNotification } = useNotifications();
+  
+  // ✨ Responsive: Get window dimensions
+  const { width: windowWidth } = useWindowDimensions();
+  const isWeb = Platform.OS === 'web';
+  
+  // ✨ Responsive breakpoints
+  const MAX_CONTENT_WIDTH = 600; // Max width for content on web/tablet
+  const isWideScreen = windowWidth > MAX_CONTENT_WIDTH;
+  
+  // ✨ Calculate responsive content width
+  const contentWidth = isWeb && isWideScreen ? MAX_CONTENT_WIDTH : windowWidth;
+  const horizontalPadding = isWeb && isWideScreen ? (windowWidth - MAX_CONTENT_WIDTH) / 2 : 0;
 
   const scrollViewRef = useRef<ScrollView>(null);
   const reviewsSectionRef = useRef<View>(null);
@@ -293,37 +307,53 @@ const ProductDetailsContent: React.FC = () => {
   const displayName = product.name ?? routeName ?? 'Product';
   const imageUrl = product.imageUrl || routeImageUrl;
 
+  // ✨ Responsive container style
+  const responsiveContainerStyle = {
+    width: '100%' as const,
+    maxWidth: isWeb ? MAX_CONTENT_WIDTH : undefined,
+    alignSelf: 'center' as const,
+  };
+
   return (
     <ScreenWrapper backgroundColor={colors.background}>
-      <ScrollView ref={scrollViewRef} showsVerticalScrollIndicator={false}>
-        {/* Back Button */}
-        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-          <Ionicons name="chevron-back" size={20} color={colors.foreground} />
-          <Text style={[styles.backButtonText, { color: colors.foreground }]}>Back</Text>
-        </TouchableOpacity>
+      <ScrollView 
+        ref={scrollViewRef} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={isWeb && isWideScreen ? { alignItems: 'center' } : undefined}
+      >
+        {/* ✨ Responsive Wrapper */}
+        <View style={responsiveContainerStyle}>
+          {/* Back Button */}
+          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
+            <Ionicons name="chevron-back" size={20} color={colors.foreground} />
+            <Text style={[styles.backButtonText, { color: colors.foreground }]}>Back</Text>
+          </TouchableOpacity>
 
-        {/* Product Image */}
-        {imageUrl && (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
-            
-            <TouchableOpacity
-              onPress={handleWishlistToggle}
-              style={[styles.wishlistButton, {
-                backgroundColor: wishlistButtonBg,
-              }]}
-            >
-              <Ionicons
-                name={inWishlist ? 'heart' : 'heart-outline'}
-                size={24}
-                color={wishlistIconColor}
-              />
-            </TouchableOpacity>
-          </View>
-        )}
+          {/* Product Image */}
+          {imageUrl && (
+            <View style={[
+              styles.imageContainer,
+              isWeb && { borderRadius: BorderRadius.xl, overflow: 'hidden', marginHorizontal: Spacing.lg }
+            ]}>
+              <Image source={{ uri: imageUrl }} style={styles.image} resizeMode="cover" />
+              
+              <TouchableOpacity
+                onPress={handleWishlistToggle}
+                style={[styles.wishlistButton, {
+                  backgroundColor: wishlistButtonBg,
+                }]}
+              >
+                <Ionicons
+                  name={inWishlist ? 'heart' : 'heart-outline'}
+                  size={24}
+                  color={wishlistIconColor}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
 
-        {/* Product Info */}
-        <View style={styles.infoSection}>
+          {/* Product Info */}
+          <View style={styles.infoSection}>
           {/* ✨ Display all categories as chips */}
           {product.categories && product.categories.length > 0 && (
             <View style={styles.categoriesRow}>
@@ -442,6 +472,7 @@ const ProductDetailsContent: React.FC = () => {
             </View>
           )}
         </View>
+        </View>{/* ✨ End Responsive Wrapper */}
       </ScrollView>
 
       <AddReviewModal

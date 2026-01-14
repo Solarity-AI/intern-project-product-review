@@ -7,6 +7,7 @@ import { getProducts, ApiProduct } from '../services/api';
 import { TouchableWithoutFeedback } from 'react-native';
 
 const SORT_STORAGE_KEY = 'user_sort_preference';
+
 import {
   View,
   Text,
@@ -16,7 +17,6 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
-  ScrollView,
 } from 'react-native';
 
 import { useNavigation, useFocusEffect, useRoute, RouteProp } from '@react-navigation/native';
@@ -25,52 +25,65 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ScreenWrapper } from '../components/ScreenWrapper';
-import { ProductCard } from '../components/ProductCard';
 import { SelectableProductCard } from '../components/SelectableProductCard';
-import { CategoryFilter } from '../components/CategoryFilter';
-import { SortFilter } from '../components/SortFilter';
 import { SearchBar } from '../components/SearchBar';
 import { LoadMoreCard } from '../components/LoadMoreCard';
-import { OfflineBanner } from '../components/OfflineBanner'; // ✨ Added
+import { OfflineBanner } from '../components/OfflineBanner';
 import { useNotifications } from '../context/NotificationContext';
-import { useWishlist, WishlistItem } from '../context/WishlistContext';
+import { useWishlist } from '../context/WishlistContext';
 import { useTheme } from '../context/ThemeContext';
 import { useSearch } from '../context/SearchContext';
-import { useNetwork } from '../context/NetworkContext'; // ✨ Added
+import { useNetwork } from '../context/NetworkContext';
 
 import { RootStackParamList } from '../types';
-import { Spacing, FontSize, FontWeight, BorderRadius } from '../constants/theme';
+import { BorderRadius, FontSize, FontWeight, Spacing } from '../constants/theme';
 
-export const ProductListScreen: React.FC = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+type ProductListNavigationProp = NativeStackNavigationProp<RootStackParamList, 'ProductList'>;
+
+export const ProductListScreen = () => {
+  const navigation = useNavigation<ProductListNavigationProp>();
   const route = useRoute<RouteProp<RootStackParamList, 'ProductList'>>();
   const { colors, colorScheme, toggleTheme } = useTheme();
   const { unreadCount } = useNotifications();
-  const { wishlistCount } = useWishlist();
-  const { addSearchTerm, searchHistory } = useSearch();
-  const { isConnected, isInternetReachable, checkConnection } = useNetwork(); // ✨ Added
+  const { wishlistCount, addMultipleToWishlist } = useWishlist();
+  const { addSearchTerm } = useSearch();
+  const { isConnected, isInternetReachable, checkConnection } = useNetwork();
 
   const { width } = useWindowDimensions();
   const isWeb = Platform.OS === 'web';
+  const webBp = !isWeb ? 'mobile' : width < 720 ? 'narrow' : width < 1100 ? 'medium' : 'wide';
 
-  // ✨ Check if offline
+  // ✅ Tek kaynak: tüm web layout aynı container genişliğini kullansın
+  const containerMaxWidth =
+    !isWeb ? undefined : webBp === 'wide' ? 1200 : webBp === 'medium' ? 1040 : 900;
+
+  const headerIconSize = isWeb ? 22 : 20;
+  const headerIconSizeBig = isWeb ? 24 : 22;
+
+  // Offline
   const isOffline = !isConnected || isInternetReachable === false;
 
-  // ✨ Refs to prevent double fetching
+  // Refs to prevent double fetching
   const isFetchingRef = useRef(false);
   const lastFetchParamsRef = useRef<string>('');
-  const isInitialMountRef = useRef(true);
+  const isInitialLoadRef = useRef(true);
 
-  // Grid mode: 1, 2, 4 columns (cycles)
+  // Grid mode: 1 / 2 / 4
   const [gridMode, setGridMode] = useState<1 | 2 | 4>(2);
-  
   const numColumns = gridMode;
+  const gridTouchedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isWeb) return;
+    if (gridTouchedRef.current) return;
+
+    const next = width < 720 ? 1 : width < 1100 ? 2 : 4;
+    if (gridMode !== next) setGridMode(next);
+  }, [isWeb, width, gridMode]);
 
   // Multi-select mode
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
-  const { addToWishlist, addMultipleToWishlist, isInWishlist } = useWishlist();
-
 
   const [apiProducts, setApiProducts] = useState<ApiProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -78,340 +91,176 @@ export const ProductListScreen: React.FC = () => {
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalProductsCount, setTotalProductsCount] = useState(0);
 
-  const initialCategory = (route.params as any)?.category || 'All';
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  // Search / Sort / Filter
+  const [searchQuery, setSearchQuery] = useState((route.params as any)?.search ?? '');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState((route.params as any)?.search ?? '');
+  const [selectedCategory, setSelectedCategory] = useState((route.params as any)?.category ?? 'All');
   const [sortBy, setSortBy] = useState('name,asc');
-  const [sortLoaded, setSortLoaded] = useState(false); // ✨ Sort yüklenene kadar bekle
-
-  // ✨ Load saved sort preference on mount
-  useEffect(() => {
-    const loadSortPreference = async () => {
-      try {
-        const savedSort = await AsyncStorage.getItem(SORT_STORAGE_KEY);
-        if (savedSort) {
-          console.log('Loaded sort preference:', savedSort);
-          setSortBy(savedSort);
-        }
-      } catch (error) {
-        console.error('Error loading sort preference:', error);
-      } finally {
-        setSortLoaded(true);
-      }
-    };
-    loadSortPreference();
-  }, []);
-
-  // ✨ Save sort preference when it changes
-  const saveSortPreference = async (sort: string) => {
-    try {
-      await AsyncStorage.setItem(SORT_STORAGE_KEY, sort);
-      console.log('Saved sort preference:', sort);
-    } catch (error) {
-      console.error('Error saving sort preference:', error);
-    }
-  };
-
-  useEffect(() => {
-    if ((route.params as any)?.category) {
-      setSelectedCategory((route.params as any).category);
-    }
-  }, [route.params]);
-
-  // Debounce search query
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery !== debouncedSearchQuery) {
-        console.log('Setting debounced search query:', searchQuery);
-        setDebouncedSearchQuery(searchQuery);
-        if (searchQuery.trim().length > 0) {
-          addSearchTerm(searchQuery);
-        }
-      }
-    }, 500); // ✨ Reduced from 1000ms to 500ms for better UX
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
-
-  // Toggle grid: 1 → 2 → 4 → 1
-  const toggleGridMode = () => {
-    setGridMode(prev => {
-      if (prev === 1) return 2;
-      if (prev === 2) return 4;
-      return 1;
-    });
-  };
-
-  // Get icon for current grid mode
-  const getGridIcon = (): keyof typeof Ionicons.glyphMap => {
-    if (gridMode === 1) return 'list';
-    if (gridMode === 2) return 'grid';
-    return 'apps'; // 4 columns
-  };
-
-
-  // Selection handlers
-  const handleCardPress = (product: ApiProduct) => {
-    if (isSelectionMode) {
-      const productId = String((product as any)?.id ?? '');
-      const newSelected = new Set(selectedItems);
-      if (newSelected.has(productId)) {
-        newSelected.delete(productId);
-      } else {
-        newSelected.add(productId);
-      }
-      setSelectedItems(newSelected);
-      if (newSelected.size === 0) {
-        setIsSelectionMode(false);
-      }
-    } else {
-      navigation.navigate('ProductDetails', {
-        productId: String((product as any)?.id ?? ''),
-        imageUrl: (product as any)?.imageUrl,
-        name: (product as any)?.name,
-      } as any);
-    }
-  };
-
-  const handleCardLongPress = (product: ApiProduct) => {
-    const productId = String((product as any)?.id ?? '');
-    setIsSelectionMode(true);
-    setSelectedItems(new Set([productId]));
-  };
-
-  // Bulk add selected products to wishlist (professional method name)
-  const handleAddMultiple = () => {
-    // Convert Set to Array for processing
-    const selectedProductIds = Array.from(selectedItems);
-    
-    // Build wishlist items array
-    const itemsToAdd: Array<Omit<WishlistItem, 'addedAt'>> = [];
-    
-    selectedProductIds.forEach(productId => {
-      const product = apiProducts.find(p => String((p as any)?.id) === productId);
-      if (product) {
-        itemsToAdd.push({
-          id: productId,
-          name: (product as any)?.name ?? 'Product',
-          price: (product as any)?.price,
-          imageUrl: (product as any)?.imageUrl,
-          category: (product as any)?.category,
-          averageRating: (product as any)?.averageRating,
-        });
-      }
-    });
-    
-    // Add all items to wishlist in one optimized batch
-    addMultipleToWishlist(itemsToAdd);
-    
-    // Reset selection state
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
-  };
-
-  const handleCancelSelection = () => {
-    setSelectedItems(new Set());
-    setIsSelectionMode(false);
-  };
-
-  // ✨ Optimized fetchProducts with duplicate request prevention and offline check
-  const fetchProducts = useCallback(async (pageNum: number = 0, append: boolean = false) => {
-    // ✨ Check if offline - show error and return early
-    if (isOffline) {
-      setError('No internet connection. Please check your network.');
-      setLoading(false);
-      setLoadingMore(false);
-      return;
-    }
-
-    // Create a unique key for this request
-    const fetchKey = `${pageNum}-${selectedCategory}-${sortBy}-${debouncedSearchQuery}-${append}`;
-    
-    // ✨ Prevent duplicate requests
-    if (isFetchingRef.current && !append) {
-      console.log('Skipping duplicate fetch request');
-      return;
-    }
-    
-    // ✨ Skip if same params (for non-append requests)
-    if (!append && lastFetchParamsRef.current === fetchKey) {
-      console.log('Skipping fetch - same params as last request');
-      return;
-    }
-
-    try {
-      isFetchingRef.current = true;
-      lastFetchParamsRef.current = fetchKey;
-      
-      console.log(`Fetching products: page=${pageNum}, search="${debouncedSearchQuery}", category=${selectedCategory}`);
-      
-      if (!append) {
-        setLoading(true);
-      } else {
-        setLoadingMore(true);
-      }
-      setError(null); // ✨ Clear previous errors
-
-      const page = await getProducts({ 
-        page: pageNum, 
-        size: 20,
-        sort: sortBy,
-        category: selectedCategory,
-        search: debouncedSearchQuery
-      });
-      
-      const newProducts = page?.content ?? [];
-      console.log(`Fetched ${newProducts.length} products`);
-      
-      if (append) {
-        setApiProducts(prev => [...prev, ...newProducts]);
-      } else {
-        setApiProducts(newProducts);
-      }
-      
-      setCurrentPage(pageNum);
-      setTotalPages(page?.totalPages ?? 0);
-      setHasMore(!page?.last);
-      setTotalProductsCount(page?.totalElements ?? 0);
-      
-    } catch (e: any) {
-      console.error('Fetch error:', e);
-      // ✨ Better error messages based on error type
-      const errorMessage = e?.message?.toLowerCase() || '';
-      if (errorMessage.includes('network') || errorMessage.includes('connection')) {
-        setError('No internet connection. Please check your network.');
-      } else {
-        setError(e?.message ?? 'Failed to load products');
-      }
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      isFetchingRef.current = false;
-    }
-  }, [selectedCategory, sortBy, debouncedSearchQuery, isOffline]);
-
-  // ✨ Single useEffect for fetching - replaces both useEffect and useFocusEffect
-  // ✨ Wait for sort preference to load before fetching
-  useEffect(() => {
-    // Don't fetch until sort preference is loaded
-    if (!sortLoaded) {
-      return;
-    }
-    
-    // Skip initial mount to prevent double fetch
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false;
-      fetchProducts(0, false);
-      return;
-    }
-    
-    // Fetch on filter/sort/search changes
-    fetchProducts(0, false);
-  }, [selectedCategory, sortBy, debouncedSearchQuery, sortLoaded]);
-
-  // ✨ Refetch when connection is restored
-  useEffect(() => {
-    if (!isOffline && error?.includes('internet')) {
-      console.log('Connection restored, refetching...');
-      setError(null);
-      lastFetchParamsRef.current = ''; // Reset to force refetch
-      fetchProducts(0, false);
-    }
-  }, [isOffline]);
-
-  // ✨ Handle retry button press
-  const handleRetry = useCallback(async () => {
-    const connected = await checkConnection();
-    if (connected) {
-      setError(null);
-      lastFetchParamsRef.current = ''; // Reset to force refetch
-      fetchProducts(0, false);
-    }
-  }, [checkConnection, fetchProducts]);
-
-  // ✨ useFocusEffect only for refetch when returning to screen (optional refresh)
-  useFocusEffect(
-    useCallback(() => {
-      // Only refetch if we have stale data (e.g., returning from another screen)
-      // This is now optional - remove if you don't want auto-refresh on focus
-      // fetchProducts(0, false);
-      
-      // Do nothing - data is already loaded
-      return () => {
-        // Cleanup if needed
-      };
-    }, [])
-  );
-
-  const loadMoreProducts = useCallback(() => {
-    // ✨ Don't load more if offline
-    if (isOffline) return;
-    if (!loadingMore && hasMore && !loading && !isFetchingRef.current) {
-      fetchProducts(currentPage + 1, true);
-    }
-  }, [loadingMore, hasMore, loading, currentPage, fetchProducts, isOffline]);
+  const [sortLoaded, setSortLoaded] = useState(false);
 
   const filteredProducts = apiProducts;
 
-  const stats = useMemo(() => {
-    const totalReviews = apiProducts.reduce((acc, p) => acc + ((p as any)?.reviewCount ?? 0), 0);
-    const sumRating = apiProducts.reduce((acc, p) => acc + ((p as any)?.averageRating ?? 0), 0);
-    const avgRating = apiProducts.length > 0 ? sumRating / apiProducts.length : 0;
+  const loadSortPreference = useCallback(async () => {
+    try {
+      const storedSort = await AsyncStorage.getItem(SORT_STORAGE_KEY);
+      if (storedSort) setSortBy(storedSort);
+    } finally {
+      setSortLoaded(true);
+    }
+  }, []);
 
-    return {
-      totalReviews,
-      avgRating,
-      productCount: totalProductsCount,
-    };
-  }, [apiProducts, totalProductsCount]);
+  const saveSortPreference = useCallback(async (value: string) => {
+    try {
+      await AsyncStorage.setItem(SORT_STORAGE_KEY, value);
+    } catch {
+      // no-op
+    }
+  }, []);
 
-  const handleSearchSubmit = (term: string) => {
-    setSearchQuery(term);
-    addSearchTerm(term);
-  };
+  useEffect(() => {
+    loadSortPreference();
+  }, [loadSortPreference]);
 
-  const handleCategoryChange = (category: string) => {
-    // ✨ Only update if category actually changed
-    if (category !== selectedCategory) {
-      setSelectedCategory(category);
-      if (Platform.OS === 'web') {
-        navigation.setParams({ category } as any);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchQuery !== debouncedSearchQuery) {
+        setDebouncedSearchQuery(searchQuery);
+        if (searchQuery.trim().length > 0) addSearchTerm(searchQuery);
       }
-    }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, debouncedSearchQuery, addSearchTerm]);
+
+  const toggleGridMode = () => {
+    gridTouchedRef.current = true;
+    setGridMode(prev => (prev === 1 ? 2 : prev === 2 ? 4 : 1));
   };
 
-  // ✨ Handle sort change with duplicate prevention and persistence
-  const handleSortChange = (sort: string) => {
-    if (sort !== sortBy) {
-      setSortBy(sort);
-      saveSortPreference(sort); // ✨ Save to AsyncStorage
-    }
+  const handleCancelSelection = () => {
+    setIsSelectionMode(false);
+    setSelectedItems(new Set());
   };
 
-  // ✨ Reset all filters to default state
-  const handleReset = () => {
-    // ✨ Reset lastFetchParams to force a new fetch
+  const handleAddSelectedToWishlist = () => {
+    const selectedProducts = filteredProducts.filter(p => selectedItems.has(String((p as any)?.id ?? '')));
+    addMultipleToWishlist(selectedProducts as any);
+    handleCancelSelection();
+  };
+
+  const handleCardLongPress = (product: ApiProduct) => {
+    const id = String((product as any)?.id ?? '');
+    if (!id) return;
+    setIsSelectionMode(true);
+    setSelectedItems(prev => new Set(prev).add(id));
+  };
+
+  const handleCardPress = (product: ApiProduct) => {
+    const id = String((product as any)?.id ?? '');
+    if (!id) return;
+
+    if (isSelectionMode) {
+      setSelectedItems(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        if (next.size === 0) setIsSelectionMode(false);
+        return next;
+      });
+      return;
+    }
+
+    navigation.navigate('ProductDetails', { productId: (product as any)?.id });
+  };
+
+  const fetchProducts = useCallback(
+    async (page: number, append: boolean) => {
+      if (isFetchingRef.current) return;
+      if (!sortLoaded) return;
+
+      const paramsKey = `${page}-${selectedCategory}-${debouncedSearchQuery}-${sortBy}`;
+      if (lastFetchParamsRef.current === paramsKey && !isInitialLoadRef.current) return;
+
+      isFetchingRef.current = true;
+      lastFetchParamsRef.current = paramsKey;
+
+      try {
+        if (page === 0) setLoading(true);
+        else setLoadingMore(true);
+
+        setError(null);
+
+        if (isOffline) return;
+
+        const res = await getProducts({
+          page,
+          size: 20,
+          category: selectedCategory === 'All' ? undefined : selectedCategory,
+          search: debouncedSearchQuery?.trim() ? debouncedSearchQuery.trim() : undefined,
+          sort: sortBy,
+        });
+
+        const items = (res as any)?.content ?? (res as any)?.items ?? [];
+        const totalPagesFromApi = (res as any)?.totalPages ?? 0;
+
+        setTotalPages(totalPagesFromApi);
+        setCurrentPage(page);
+        setHasMore(page < totalPagesFromApi - 1);
+        setApiProducts(prev => (append ? [...prev, ...items] : items));
+      } catch (err: any) {
+        setError(err?.message ?? 'Failed to fetch products');
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
+        isFetchingRef.current = false;
+        isInitialLoadRef.current = false;
+      }
+    },
+    [selectedCategory, debouncedSearchQuery, sortBy, sortLoaded, isOffline]
+  );
+
+  useEffect(() => {
+    if (!sortLoaded) return;
     lastFetchParamsRef.current = '';
-    
+    fetchProducts(0, false);
+  }, [selectedCategory, debouncedSearchQuery, sortBy, sortLoaded, fetchProducts]);
+
+  const loadMoreProducts = () => {
+    if (loadingMore || loading || !hasMore) return;
+    fetchProducts(currentPage + 1, true);
+  };
+
+  const stats = useMemo(() => ({ productCount: apiProducts.length }), [apiProducts.length]);
+
+  const handleSearchSubmit = (search: string) => {
+    if (Platform.OS === 'web') navigation.setParams({ search } as any);
+  };
+
+  const handleReset = () => {
+    lastFetchParamsRef.current = '';
     setSearchQuery('');
     setDebouncedSearchQuery('');
     setSelectedCategory('All');
     setSortBy('name,asc');
-    if (Platform.OS === 'web') {
-      navigation.setParams({ category: 'All', search: '' } as any);
-    }
+    if (Platform.OS === 'web') navigation.setParams({ category: 'All', search: '' } as any);
   };
 
+  const handleRetry = useCallback(async () => {
+    const online = await checkConnection();
+    if (online) {
+      setError(null);
+      lastFetchParamsRef.current = '';
+      fetchProducts(0, false);
+    }
+  }, [checkConnection, fetchProducts]);
+
   const topHeader = (
-    <View>
-      <View style={styles.topBar}>
+    <View style={[isWeb && styles.webPageContainer, isWeb && { maxWidth: containerMaxWidth }]}>
+      <View style={[styles.topBar, isWeb && styles.topBarWeb]}>
         <TouchableOpacity onPress={handleReset} style={styles.logoContainer}>
           <LinearGradient colors={[colors.primary, colors.accent]} style={styles.logoIcon}>
             <Ionicons name="star" size={16} color={colors.primaryForeground} />
@@ -421,36 +270,64 @@ export const ProductListScreen: React.FC = () => {
 
         <View style={styles.headerButtons}>
           <TouchableOpacity
-            style={[styles.themeButton, { backgroundColor: colors.secondary }]}
+            style={[
+              styles.themeButton,
+              isWeb && styles.headerIconButtonWeb,
+              { backgroundColor: colors.secondary },
+            ]}
             onPress={toggleTheme}
             activeOpacity={0.8}
           >
-            <Ionicons 
-              name={colorScheme === 'dark' ? 'sunny' : 'moon'} 
-              size={20} 
-              color={colors.foreground} 
+            <Ionicons
+              name={colorScheme === 'dark' ? 'sunny' : 'moon'}
+              size={headerIconSize}
+              color={colors.foreground}
             />
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.wishlistButton}
+            style={[
+              styles.gridButton,
+              isWeb && styles.headerIconButtonWeb,
+              { backgroundColor: colors.secondary },
+            ]}
+            onPress={toggleGridMode}
+            activeOpacity={0.8}
+          >
+            <Ionicons
+              name={gridMode === 1 ? 'list' : gridMode === 2 ? 'grid-outline' : 'grid'}
+              size={headerIconSize}
+              color={colors.foreground}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[
+              styles.themeButton,
+              isWeb && styles.headerIconButtonWeb,
+              { backgroundColor: colors.secondary },
+            ]}
             onPress={() => navigation.navigate('Wishlist')}
             activeOpacity={0.8}
           >
-            <Ionicons name="heart-outline" size={22} color={colors.foreground} />
+            <Ionicons name="heart-outline" size={headerIconSizeBig} color={colors.foreground} />
             {wishlistCount > 0 && (
-              <View style={[styles.badge, { backgroundColor: colors.primary }]}>
+              <View style={[styles.badge, { backgroundColor: colors.destructive }]}>
                 <Text style={styles.badgeText}>{wishlistCount}</Text>
               </View>
             )}
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={styles.notificationButton}
+            style={[
+              styles.notificationButton,
+              isWeb && styles.headerIconButtonWeb,
+              { backgroundColor: colors.secondary },
+            ]}
             onPress={() => navigation.navigate('Notifications')}
             activeOpacity={0.8}
           >
-            <Ionicons name="notifications-outline" size={22} color={colors.foreground} />
+            <Ionicons name="notifications-outline" size={headerIconSizeBig} color={colors.foreground} />
             {unreadCount > 0 && (
               <View style={[styles.badge, { backgroundColor: colors.destructive }]}>
                 <Text style={styles.badgeText}>{unreadCount}</Text>
@@ -460,204 +337,147 @@ export const ProductListScreen: React.FC = () => {
         </View>
       </View>
 
-      <View style={[styles.heroSection, { backgroundColor: colors.secondary }]}>
-        <Text style={[styles.heroTitle, { color: colors.foreground }]}>
-          Find Products You&apos;ll <Text style={{ color: colors.primary }}>Love</Text>
-        </Text>
-
-        <View style={styles.statsRow}>
-          {[
-            { icon: 'star', value: stats.avgRating.toFixed(1), label: 'Avg Rating' },
-            { icon: 'chatbubbles', value: stats.totalReviews.toLocaleString(), label: 'Reviews' },
-            { icon: 'cube', value: String(stats.productCount), label: 'Products' },
-          ].map((s, i) => (
-            <View key={i} style={styles.statItem}>
-              <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
-                <Ionicons name={s.icon as any} size={18} color={colors.primaryForeground} />
-              </LinearGradient>
-              <View>
-                <Text style={[styles.statValue, { color: colors.foreground }]}>{s.value}</Text>
-                <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{s.label}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-
-  const listHeader = (
-    <View>
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Explore Products</Text>
-      </View>
-
-      <View style={styles.categoryFilterWrapper}>
-        <CategoryFilter 
-          selectedCategory={selectedCategory} 
-          onCategoryChange={handleCategoryChange}
-        />
-      </View>
-
-      <View style={styles.sortFilterWrapper}>
-        <View style={styles.sortHeader}>
-          <Text style={[styles.filterLabel, { color: colors.mutedForeground }]}>Sort by:</Text>
-          
-          <TouchableOpacity
-            onPress={toggleGridMode}
-            style={[styles.gridToggleButton, { backgroundColor: colors.secondary }]}
-            activeOpacity={0.8}
-          >
-            <Ionicons name={getGridIcon()} size={20} color={colors.foreground} />
-          </TouchableOpacity>
-        </View>
-        
-        {/* ✨ Use handleSortChange instead of setSortBy directly */}
-        <SortFilter selectedSort={sortBy} onSortChange={handleSortChange} />
-      </View>
-
-      {loading && <ActivityIndicator style={{ marginTop: 16 }} />}
-      {error && (
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={24} color={colors.destructive} />
-          <Text style={{ color: colors.destructive, marginLeft: Spacing.sm, flex: 1 }}>{error}</Text>
-          {isOffline && (
-            <TouchableOpacity onPress={handleRetry} style={styles.retryTextButton}>
-              <Text style={{ color: colors.primary, fontWeight: FontWeight.semibold }}>Retry</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-    </View>
-  );
-
-  // ✨ Empty state for offline with no cached data
-  const renderOfflineEmpty = () => (
-    <View style={styles.offlineEmptyContainer}>
-      <View style={[styles.offlineIconContainer, { backgroundColor: colors.muted }]}>
-        <Ionicons name="cloud-offline-outline" size={64} color={colors.mutedForeground} />
-      </View>
-      <Text style={[styles.offlineTitle, { color: colors.foreground }]}>
-        You're Offline
-      </Text>
-      <Text style={[styles.offlineSubtitle, { color: colors.mutedForeground }]}>
-        Please check your internet connection to browse products
-      </Text>
-      <TouchableOpacity
-        style={[styles.offlineRetryButton, { backgroundColor: colors.primary }]}
-        onPress={handleRetry}
-        activeOpacity={0.8}
+      <View
+        style={[
+          styles.heroSection,
+          { backgroundColor: colors.secondary },
+          isWeb && styles.heroSectionWeb,
+          isWeb && {
+            maxWidth: containerMaxWidth,
+            paddingVertical: webBp === 'narrow' ? Spacing.xl : Spacing['2xl'],
+          },
+        ]}
       >
-        <Ionicons name="refresh" size={18} color={colors.primaryForeground} />
-        <Text style={[styles.offlineRetryText, { color: colors.primaryForeground }]}>
-          Try Again
+        <Text style={[styles.heroTitle, isWeb && styles.heroTitleWeb, { color: colors.foreground }]}>
+          Find your next favorite product
         </Text>
-      </TouchableOpacity>
+
+        <Text style={[styles.heroSubtitle, isWeb && styles.heroSubtitleWeb, { color: colors.mutedForeground }]}>
+          Browse, review, and discover products you’ll love.
+        </Text>
+
+        <View style={[styles.statsRow, isWeb && webBp === 'narrow' && styles.statsRowNarrow]}>
+          <View style={styles.statItem}>
+            <LinearGradient colors={[colors.primary, colors.accent]} style={styles.statIcon}>
+              <Ionicons name="cube" size={18} color={colors.primaryForeground} />
+            </LinearGradient>
+            <View>
+              <Text style={[styles.statValue, { color: colors.foreground }]}>{String(stats.productCount)}</Text>
+              <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>Products</Text>
+            </View>
+          </View>
+        </View>
+      </View>
     </View>
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      return () => { };
+    }, [])
   );
 
   return (
-    <ScreenWrapper backgroundColor={colors.background}>
-      {/* ✨ Offline Banner */}
-      <OfflineBanner onRetry={handleRetry} />
-      
-      <TouchableWithoutFeedback onPress={() => {
-        if (isSelectionMode && selectedItems.size > 0) {
-          handleCancelSelection();
-        }
-      }}>
+    <ScreenWrapper>
+      <TouchableWithoutFeedback
+        onPress={() => {
+          if (isSelectionMode && selectedItems.size > 0) handleCancelSelection();
+        }}
+      >
         <View style={{ flex: 1 }}>
-          {/* ✨ Static Header (TopBar + Hero + Search) */}
           <View style={{ zIndex: 100 }}>
             {topHeader}
-            <View style={styles.searchSection}>
-              <SearchBar 
-                value={searchQuery} 
-                onChangeText={setSearchQuery} 
-                onSearchSubmit={handleSearchSubmit}
-              />
+
+            {/* ✅ SearchBar: hero/list ile aynı container genişliği */}
+            <View
+              style={[
+                styles.searchSection,
+                isWeb && styles.searchSectionWeb,
+                isWeb && { maxWidth: containerMaxWidth },
+              ]}
+            >
+              <SearchBar value={searchQuery} onChangeText={setSearchQuery} onSearchSubmit={handleSearchSubmit} />
             </View>
           </View>
 
-          {/* ✨ Product List */}
-          <FlatList
-            data={filteredProducts}
-            key={`${numColumns}-${isSelectionMode ? 'select' : 'normal'}`}
-            numColumns={numColumns}
-            keyExtractor={(item) => String((item as any)?.id)}
-            ListHeaderComponent={listHeader}
-            contentContainerStyle={[
-              styles.listContent,
-              isWeb && styles.webMaxWidth,
-            ]}
-            columnWrapperStyle={numColumns > 1 ? styles.columnWrapper : undefined}
-            ItemSeparatorComponent={numColumns === 1 ? () => <View style={{ height: Spacing.md }} /> : undefined}
-            renderItem={({ item }) => (
-              <View
-                style={[
-                  numColumns > 1 && styles.gridItem,
-                  numColumns > 1 && { flex: 1, maxWidth: `${100 / numColumns - 1}%` },
-                  numColumns === 1 && { paddingHorizontal: Spacing.lg },
-                ]}
-              >
-                <SelectableProductCard
-                  product={item}
-                  numColumns={numColumns}
-                  isSelectionMode={isSelectionMode}
-                  isSelected={selectedItems.has(String((item as any)?.id ?? ''))}
-                  onPress={handleCardPress}
-                  onLongPress={handleCardLongPress}
-                />
-              </View>
-            )}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
-            
-            ListFooterComponent={
-              <>
-                {filteredProducts.length > 0 && (
-                  <LoadMoreCard
-                    onPress={loadMoreProducts}
-                    loading={loadingMore}
-                    hasMore={hasMore}
-                    currentPage={currentPage}
-                    totalPages={totalPages}
+          {isOffline && <OfflineBanner onRetry={handleRetry} />}
+
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Loading products...</Text>
+            </View>
+          ) : error ? (
+            <View style={styles.errorContainer}>
+              <Ionicons name="alert-circle-outline" size={24} color={colors.destructive} />
+              <Text style={{ color: colors.destructive, marginLeft: Spacing.sm, flex: 1 }}>{error}</Text>
+              {isOffline && (
+                <TouchableOpacity onPress={handleRetry} style={styles.retryTextButton}>
+                  <Text style={{ color: colors.primary, fontWeight: FontWeight.semibold }}>Retry</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : (
+            <FlatList
+              data={filteredProducts}
+              key={numColumns}
+              numColumns={numColumns}
+              columnWrapperStyle={numColumns > 1 ? styles.columnWrap : undefined}
+
+              keyExtractor={(item: any) => String(item?.id ?? '')}
+              contentContainerStyle={[
+                styles.listContent,
+                isWeb && styles.webListContent,
+                isWeb && { maxWidth: containerMaxWidth },
+              ]}
+              renderItem={({ item }) => (
+                <View
+                  style={[
+                    numColumns > 1 && styles.gridItem,
+                    numColumns > 1 && { flex: 1, minWidth: 0 },
+                    numColumns === 1 && { paddingHorizontal: Spacing.lg },
+                  ]}
+                >
+                  <SelectableProductCard
+                    product={item}
+                    numColumns={numColumns}
+                    isSelectionMode={isSelectionMode}
+                    isSelected={selectedItems.has(String((item as any)?.id ?? ''))}
+                    onPress={handleCardPress}
+                    onLongPress={handleCardLongPress}
                   />
-                )}
-              </>
-            }
-            
-            ListEmptyComponent={
-              !loading ? (
-                isOffline && apiProducts.length === 0 ? (
-                  renderOfflineEmpty()
-                ) : (
-                  <View style={{ padding: Spacing.xl, zIndex: -1 }}>
-                    <Text style={{ color: colors.mutedForeground }}>No products found.</Text>
+                </View>
+              )}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              ListFooterComponent={
+                filteredProducts.length > 0 ? (
+                  <View style={[styles.footerWrap, isWeb && styles.footerWrapWeb, isWeb && { maxWidth: containerMaxWidth }]}>
+                    {/* ✅ LoadMoreCard artık FULL-WIDTH olacak (LoadMoreCard.tsx fix ile) */}
+                    <LoadMoreCard
+                      onPress={loadMoreProducts}
+                      loading={loadingMore}
+                      hasMore={hasMore}
+                      currentPage={currentPage}
+                      totalPages={totalPages}
+                    />
                   </View>
-                )
-              ) : null
-            }
-          />
+                ) : null
+              }
+              onEndReachedThreshold={0.4}
+              onEndReached={() => {
+                if (hasMore) loadMoreProducts();
+              }}
+            />
+          )}
 
-          {/* Floating action bar */}
           {isSelectionMode && selectedItems.size > 0 && (
-            <View style={[styles.floatingBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View style={[styles.floatingBar, { backgroundColor: colors.card }]}>
               <TouchableOpacity
-                style={[styles.floatingButton, styles.cancelButton]}
-                onPress={handleCancelSelection}
-                activeOpacity={0.8}
-              >
-                <Text style={[styles.floatingButtonText, { color: colors.foreground }]}>
-                  Cancel
-                </Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.floatingButton, styles.addButton, { backgroundColor: colors.primary }]}
-                onPress={handleAddMultiple}
-                activeOpacity={0.8}
+                style={[styles.floatingButton, { backgroundColor: colors.primary }]}
+                onPress={handleAddSelectedToWishlist}
+                activeOpacity={0.85}
               >
                 <Ionicons name="heart" size={18} color="#fff" />
                 <Text style={[styles.floatingButtonText, { color: '#fff' }]}>
@@ -673,6 +493,24 @@ export const ProductListScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
+  webPageContainer: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+  },
+
+  topBarWeb: {
+    paddingHorizontal: 0,
+  },
+
+  heroSectionWeb: {
+    marginHorizontal: 0,
+    width: '100%',
+    alignSelf: 'center',
+  },
+
+  statsRowNarrow: { gap: Spacing.xl },
+
   topBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -693,35 +531,44 @@ const styles = StyleSheet.create({
 
   logoText: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
 
-  headerButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
+  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
 
   themeButton: {
-    padding: Spacing.sm,
     borderRadius: BorderRadius.full,
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
-  wishlistButton: { 
-    position: 'relative', 
-    padding: Spacing.xs,
+  gridButton: {
+    borderRadius: BorderRadius.full,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  notificationButton: { position: 'relative', padding: Spacing.xs },
+  notificationButton: {
+    borderRadius: BorderRadius.full,
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  headerIconButtonWeb: {
+    width: 46,
+    height: 46,
+  },
 
   badge: {
     position: 'absolute',
     top: -4,
     right: -4,
+    borderRadius: BorderRadius.full,
     minWidth: 18,
     height: 18,
-    borderRadius: 9,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -740,10 +587,24 @@ const styles = StyleSheet.create({
   },
 
   heroTitle: {
-    fontSize: FontSize['2xl'],
+    fontSize: FontSize.xl,
     fontWeight: FontWeight.bold,
+    marginBottom: Spacing.sm,
     textAlign: 'center',
-    marginBottom: Spacing.lg,
+  },
+
+  heroTitleWeb: {
+    fontSize: FontSize.xl,
+  },
+
+  heroSubtitle: {
+    fontSize: FontSize.base,
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+  },
+
+  heroSubtitleWeb: {
+    fontSize: FontSize.base,
   },
 
   statsRow: {
@@ -764,163 +625,107 @@ const styles = StyleSheet.create({
   },
 
   statValue: { fontSize: FontSize.lg, fontWeight: FontWeight.bold },
-  statLabel: { fontSize: FontSize.xs },
+  statLabel: { fontSize: FontSize.sm },
 
-  searchSection: { 
+  // ✅ SearchBar daha “orantılı”: biraz daha yüksek + full-width container
+  searchSection: {
     paddingVertical: Spacing.lg,
     zIndex: 9999,
     elevation: 20,
   },
-
-  sectionHeader: { paddingHorizontal: Spacing.lg, marginBottom: Spacing.sm },
-  sectionTitle: { fontSize: FontSize.xl, fontWeight: FontWeight.bold },
-
-  categoryFilterWrapper: {
-    marginBottom: Spacing.lg,
-  },
-
-  sortFilterWrapper: {
-    marginBottom: Spacing.lg,
-  },
-
-  sortHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  searchSectionWeb: {
+    width: '100%',
+    alignSelf: 'center',
     paddingHorizontal: Spacing.lg,
-    marginBottom: Spacing.xs,
-  },
-
-  filterLabel: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.medium,
-  },
-
-  gridToggleButton: {
-    width: 36,
-    height: 36,
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: Spacing.sm,
+    paddingBottom: Spacing.md,
+    transform: [{ scale: 1.06 }],
   },
 
   listContent: {
-    paddingBottom: Spacing['3xl'],
-    paddingTop: Spacing.sm,
-    zIndex: -1,
+    paddingBottom: Spacing['5xl'] + Spacing.xl,
   },
 
-  columnWrapper: {
+  webListContent: {
+    width: '100%',
+    alignSelf: 'center',
     paddingHorizontal: Spacing.lg,
-    gap: Spacing.md,
-    marginTop: Spacing.xl,
+    paddingBottom: Spacing['5xl'] + Spacing.xl,
   },
 
   gridItem: {
-    minWidth: 0,
-  },
-
-  webMaxWidth: {
-    width: '100%',
-    maxWidth: 1200,
-    alignSelf: 'center',
-  },
-
-  floatingBar: {
-    position: 'absolute',
-    bottom: Spacing.xl,
-    left: Spacing.lg,
-    right: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.xl,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  floatingButton: {
     flex: 1,
-    flexDirection: 'row',
+    minWidth: 0,
+    marginBottom: Spacing.lg,
+  },
+
+  loadingContainer: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
-  },
-  cancelButton: {
-    backgroundColor: 'transparent',
-  },
-  addButton: {
-    // backgroundColor set inline
-  },
-  floatingButtonText: {
-    fontSize: FontSize.sm,
-    fontWeight: FontWeight.semibold,
+    padding: Spacing['2xl'],
   },
 
-  // ✨ Error container styles
+  loadingText: {
+    marginTop: Spacing.md,
+    fontSize: FontSize.base,
+  },
+
   errorContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: Spacing.lg,
-    marginHorizontal: Spacing.lg,
-    marginTop: Spacing.md,
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    margin: Spacing.lg,
     borderRadius: BorderRadius.lg,
   },
 
   retryTextButton: {
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
   },
 
-  // ✨ Offline empty state styles
-  offlineEmptyContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing['2xl'],
-    paddingVertical: Spacing['3xl'],
-    gap: Spacing.md,
+  // ✅ Footer artık full-width, center + container max width
+  footerWrap: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
+    paddingTop: Spacing.lg,
+    paddingBottom: Spacing.xl,
+  },
+  footerWrapWeb: {
+    width: '100%',
+    alignSelf: 'center',
+    paddingHorizontal: Spacing.lg,
   },
 
-  offlineIconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.md,
+  floatingBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: Spacing.lg,
+    borderTopLeftRadius: BorderRadius.xl,
+    borderTopRightRadius: BorderRadius.xl,
   },
 
-  offlineTitle: {
-    fontSize: FontSize.xl,
-    fontWeight: FontWeight.bold,
-    textAlign: 'center',
-  },
-
-  offlineSubtitle: {
-    fontSize: FontSize.base,
-    textAlign: 'center',
-    marginBottom: Spacing.lg,
-  },
-
-  offlineRetryButton: {
+  floatingButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.sm,
     paddingVertical: Spacing.md,
-    paddingHorizontal: Spacing.xl,
     borderRadius: BorderRadius.lg,
   },
 
-  offlineRetryText: {
+  floatingButtonText: {
     fontSize: FontSize.base,
     fontWeight: FontWeight.semibold,
   },
+  columnWrap: {
+    paddingHorizontal: Spacing.lg,
+    justifyContent: 'space-between',
+    columnGap: Spacing.lg, // RN web + yeni RN sürümlerinde çalışır
+  },
+
 });
