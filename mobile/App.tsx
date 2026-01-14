@@ -1,5 +1,6 @@
 // React Native App Entry Point with SafeAreaProvider, Notifications, Toast, Wishlist, Theme, Network, and Linking
 import React from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme, DarkTheme, LinkingOptions } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,7 +17,7 @@ import { WishlistProvider } from './context/WishlistContext';
 import { SearchProvider } from './context/SearchContext';
 import { ToastProvider } from './context/ToastContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { NetworkProvider } from './context/NetworkContext'; // ✨ Added
+import { NetworkProvider } from './context/NetworkContext';
 import { RootStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,9 +37,22 @@ const linking: LinkingOptions<RootStackParamList> = {
   },
 };
 
+// ✨ Loading screen component to prevent white flash
+const LoadingScreen: React.FC<{ backgroundColor: string }> = ({ backgroundColor }) => (
+  <View style={[styles.loadingContainer, { backgroundColor }]}>
+    <ActivityIndicator size="large" color="#F59E0B" />
+  </View>
+);
+
 // Navigation wrapper that consumes theme
 function AppNavigator() {
-  const { colors, colorScheme } = useTheme();
+  const { colors, colorScheme, isThemeLoaded } = useTheme();
+
+  // ✨ Show loading screen until theme is loaded - prevents white flash
+  if (!isThemeLoaded) {
+    const bgColor = colorScheme === 'dark' ? '#0C0A09' : '#FDFBF8';
+    return <LoadingScreen backgroundColor={bgColor} />;
+  }
 
   // Create navigation theme based on current colorScheme
   const navigationTheme = {
@@ -67,6 +81,8 @@ function AppNavigator() {
           contentStyle: {
             backgroundColor: colors.background,
           },
+          // ✨ Prevent white flash during screen transitions
+          animationTypeForReplace: 'push',
         }}
       >
         <Stack.Screen name="ProductList" component={ProductListScreen} />
@@ -116,3 +132,11 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

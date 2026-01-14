@@ -1,8 +1,10 @@
 // ThemeContext - Manages dark/light mode state
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
+// ✨ Fixed: Prevents white flash on Android by delaying render until theme loads
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect, useMemo } from 'react';
+import { View, StyleSheet, useColorScheme, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useColorScheme } from 'react-native';
 import { Colors } from '../constants/theme';
+import * as NavigationBar from 'expo-navigation-bar';
 
 const THEME_STORAGE_KEY = 'app_theme_mode';
 
@@ -13,38 +15,69 @@ interface ThemeContextType {
   colors: typeof Colors.light;
   toggleTheme: () => void;
   setTheme: (scheme: ColorScheme) => void;
+  isThemeLoaded: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // FIX: Use system color scheme as initial value to prevent white flash
-  const systemColorScheme = useColorScheme();
-  const [colorScheme, setColorScheme] = useState<ColorScheme>(systemColorScheme === 'dark' ? 'dark' : 'light');
+// ✨ Fallback colors matching theme.ts
+const THEME_BACKGROUNDS = {
+  light: '#FDFBF8',
+  dark: '#0C0A09',
+};
 
-  // Load saved theme on mount
+export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const systemColorScheme = useColorScheme();
+  const initialScheme: ColorScheme = systemColorScheme === 'dark' ? 'dark' : 'light';
+  
+  const [colorScheme, setColorScheme] = useState<ColorScheme>(initialScheme);
+  const [isThemeLoaded, setIsThemeLoaded] = useState(false);
+
+  // ✨ Load saved theme on mount
   useEffect(() => {
+    let isMounted = true;
+    
+    const loadTheme = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (isMounted && (saved === 'light' || saved === 'dark')) {
+          setColorScheme(saved);
+        }
+      } catch (error) {
+        console.error('Error loading theme:', error);
+      } finally {
+        if (isMounted) {
+          // ✨ Small delay to ensure state is set before render
+          requestAnimationFrame(() => {
+            setIsThemeLoaded(true);
+          });
+        }
+      }
+    };
+
     loadTheme();
+    
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
-  const loadTheme = async () => {
-    try {
-      const saved = await AsyncStorage.getItem(THEME_STORAGE_KEY);
-      if (saved === 'light' || saved === 'dark') {
-        setColorScheme(saved);
-      }
-    } catch (error) {
-      console.error('Error loading theme:', error);
+  // ✨ Update Android navigation bar
+  useEffect(() => {
+    if (Platform.OS === 'android' && isThemeLoaded) {
+      const bgColor = THEME_BACKGROUNDS[colorScheme];
+      NavigationBar.setBackgroundColorAsync(bgColor);
+      NavigationBar.setButtonStyleAsync(colorScheme === 'dark' ? 'light' : 'dark');
     }
-  };
+  }, [colorScheme, isThemeLoaded]);
 
-  const saveTheme = async (scheme: ColorScheme) => {
+  const saveTheme = useCallback(async (scheme: ColorScheme) => {
     try {
       await AsyncStorage.setItem(THEME_STORAGE_KEY, scheme);
     } catch (error) {
       console.error('Error saving theme:', error);
     }
-  };
+  }, []);
 
   const toggleTheme = useCallback(() => {
     setColorScheme((prev) => {
@@ -52,26 +85,32 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       saveTheme(newScheme);
       return newScheme;
     });
-  }, []);
+  }, [saveTheme]);
 
   const setTheme = useCallback((scheme: ColorScheme) => {
     setColorScheme(scheme);
     saveTheme(scheme);
-  }, []);
+  }, [saveTheme]);
 
-  const colors = Colors[colorScheme];
+  const colors = useMemo(() => Colors[colorScheme], [colorScheme]);
+  const backgroundColor = THEME_BACKGROUNDS[colorScheme];
 
+  const value = useMemo(() => ({
+    colorScheme,
+    colors,
+    toggleTheme,
+    setTheme,
+    isThemeLoaded,
+  }), [colorScheme, colors, toggleTheme, setTheme, isThemeLoaded]);
+
+  // ✨ CRITICAL: Render a themed background container ALWAYS
+  // This prevents white flash by ensuring background is set immediately
   return (
-    <ThemeContext.Provider
-      value={{
-        colorScheme,
-        colors,
-        toggleTheme,
-        setTheme,
-      }}
-    >
-      {children}
-    </ThemeContext.Provider>
+    <View style={[styles.container, { backgroundColor }]}>
+      <ThemeContext.Provider value={value}>
+        {children}
+      </ThemeContext.Provider>
+    </View>
   );
 };
 
@@ -82,3 +121,9 @@ export const useTheme = () => {
   }
   return context;
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});
