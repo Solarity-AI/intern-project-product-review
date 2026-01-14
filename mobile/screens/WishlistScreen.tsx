@@ -154,28 +154,19 @@ export const WishlistScreen = () => {
     const id = String((item as any)?.id ?? '');
     const selected = selectedItems.has(id);
 
-    // ✅ Android 4-col kayma fix: width + item padding ile kontrol
-
+    // Simplified grid layout - gap is handled by columnWrapper
     const isGrid = numColumns > 1;
-    const colIndex = isGrid ? index % numColumns : 0;
 
     return (
       <View
         style={[
           isGrid ? styles.gridItemWrapper : styles.listItemWrapper,
           isGrid && {
-            width: `${100 / numColumns}%`,
-            maxWidth: `${100 / numColumns}%`,
+            flex: 1,
+            minWidth: 0,
           },
           !isGrid && {
             width: '100%',
-          },
-          // ✅ spacing: sadece sağa margin ver, satırın son item’ında verme
-          isGrid && {
-            paddingHorizontal: 0, // ✅ gridItemWrapper padding’ini ez
-            marginRight: colIndex === numColumns - 1 ? 0 : Spacing.sm,
-            marginBottom: Spacing.sm,
-            minWidth: 0,
           },
         ]}
         collapsable={false}
@@ -355,12 +346,10 @@ export const WishlistScreen = () => {
                 isWeb && styles.webListContent,
                 !isWeb && { paddingHorizontal: Spacing.lg }, // Mobile padding
               ]}
-              // ✅ Android 4-col kayma fix: gap yerine space-between
               columnWrapperStyle={
                 numColumns > 1
                   ? [
                     styles.columnWrapper,
-                    { justifyContent: 'flex-start' }, // ✅ space-between KALKSIN
                     isWeb && styles.columnWrapperWeb,
                   ]
                   : undefined
@@ -487,18 +476,18 @@ const styles = StyleSheet.create({
   },
 
   columnWrapper: {
-    paddingHorizontal: Spacing.lg,
-    justifyContent: 'flex-start', // ✅ space-between değil
+    justifyContent: 'flex-start',
+    gap: Spacing.sm, // Item'lar arası boşluk
   },
 
 
   columnWrapperWeb: {
-    paddingHorizontal: 0, // webListContent already has padding
+    gap: Spacing.md, // Web'de biraz daha fazla gap
   },
 
   // ✅ item wrapper: gap yerine padding (Android daha stabil)
   gridItemWrapper: {
-    paddingVertical: Spacing.sm, // yatay padding'i kaldır
+    paddingVertical: Spacing.sm / 2,
   },
 
 

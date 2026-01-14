@@ -65,10 +65,9 @@ export const ProductListScreen = () => {
   // Offline
   const isOffline = !isConnected || isInternetReachable === false;
 
-  // Refs to prevent double fetching
-  const isFetchingRef = useRef(false);
-  const lastFetchParamsRef = useRef<string>('');
-  const isInitialLoadRef = useRef(true);
+  // Refs to prevent double fetching and handle race conditions
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const fetchIdRef = useRef(0); // Unique ID for each fetch to handle race conditions
 
   // Grid mode: 1 / 2 / 3
   const [gridMode, setGridMode] = useState<1 | 2 | 3>(2);
@@ -182,16 +181,29 @@ export const ProductListScreen = () => {
     navigation.navigate('ProductDetails', { productId: (product as any)?.id });
   };
 
+  // ✨ Improved fetchProducts with race condition protection
   const fetchProducts = useCallback(
-    async (page: number, append: boolean) => {
-      if (isFetchingRef.current) return;
+    async (page: number, append: boolean, searchOverride?: string, categoryOverride?: string, sortOverride?: string) => {
       if (!sortLoaded) return;
 
-      const paramsKey = `${page}-${selectedCategory}-${submittedSearchQuery}-${sortBy}`;
-      if (lastFetchParamsRef.current === paramsKey && !isInitialLoadRef.current) return;
+      // Use override values or current state
+      const effectiveSearch = searchOverride !== undefined ? searchOverride : submittedSearchQuery;
+      const effectiveCategory = categoryOverride !== undefined ? categoryOverride : selectedCategory;
+      const effectiveSort = sortOverride !== undefined ? sortOverride : sortBy;
 
-      isFetchingRef.current = true;
-      lastFetchParamsRef.current = paramsKey;
+      // Cancel any pending request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
+      // Create new abort controller
+      abortControllerRef.current = new AbortController();
+      
+      // Increment fetch ID to track this specific request
+      fetchIdRef.current += 1;
+      const currentFetchId = fetchIdRef.current;
+
+      console.log(`[Search] Fetching with: search="${effectiveSearch}", category="${effectiveCategory}", sort="${effectiveSort}", page=${page}`);
 
       try {
         if (page === 0) setLoading(true);
@@ -199,19 +211,31 @@ export const ProductListScreen = () => {
 
         setError(null);
 
-        if (isOffline) return;
+        if (isOffline) {
+          setLoading(false);
+          setLoadingMore(false);
+          return;
+        }
 
         const res = await getProducts({
           page,
           size: 20,
-          category: selectedCategory === 'All' ? undefined : selectedCategory,
-          search: submittedSearchQuery?.trim() ? submittedSearchQuery.trim() : undefined,
-          sort: sortBy,
+          category: effectiveCategory === 'All' ? undefined : effectiveCategory,
+          search: effectiveSearch?.trim() ? effectiveSearch.trim() : undefined,
+          sort: effectiveSort,
         });
+
+        // Check if this is still the latest request (race condition protection)
+        if (currentFetchId !== fetchIdRef.current) {
+          console.log(`[Search] Ignoring stale response for fetchId=${currentFetchId}, current=${fetchIdRef.current}`);
+          return;
+        }
 
         const items = (res as any)?.content ?? (res as any)?.items ?? [];
         const totalPagesFromApi = (res as any)?.totalPages ?? 0;
         const totalElementsFromApi = (res as any)?.totalElements ?? 0;
+
+        console.log(`[Search] Received ${items.length} items for search="${effectiveSearch}"`);
 
         setTotalPages(totalPagesFromApi);
         setTotalElements(totalElementsFromApi);
@@ -219,22 +243,30 @@ export const ProductListScreen = () => {
         setHasMore(page < totalPagesFromApi - 1);
         setApiProducts(prev => (append ? [...prev, ...items] : items));
       } catch (err: any) {
+        // Ignore abort errors
+        if (err.name === 'AbortError') {
+          console.log('[Search] Request aborted');
+          return;
+        }
+        // Check if this is still the latest request
+        if (currentFetchId !== fetchIdRef.current) return;
         setError(err?.message ?? 'Failed to fetch products');
       } finally {
-        setLoading(false);
-        setLoadingMore(false);
-        isFetchingRef.current = false;
-        isInitialLoadRef.current = false;
+        // Only update loading state if this is the latest request
+        if (currentFetchId === fetchIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [selectedCategory, submittedSearchQuery, sortBy, sortLoaded, isOffline]
+    [sortLoaded, isOffline, submittedSearchQuery, selectedCategory, sortBy]
   );
 
+  // Initial load and filter changes
   useEffect(() => {
     if (!sortLoaded) return;
-    lastFetchParamsRef.current = '';
     fetchProducts(0, false);
-  }, [selectedCategory, submittedSearchQuery, sortBy, sortLoaded, fetchProducts]);
+  }, [selectedCategory, submittedSearchQuery, sortBy, sortLoaded]);
 
   useEffect(() => {
     const category = (route.params as any)?.category;
@@ -284,7 +316,6 @@ export const ProductListScreen = () => {
   };
 
   const handleReset = () => {
-    lastFetchParamsRef.current = '';
     setSearchQuery('');
     setSubmittedSearchQuery('');
     setSelectedCategory('All');
@@ -296,7 +327,6 @@ export const ProductListScreen = () => {
     const online = await checkConnection();
     if (online) {
       setError(null);
-      lastFetchParamsRef.current = '';
       fetchProducts(0, false);
     }
   }, [checkConnection, fetchProducts]);
@@ -482,22 +512,6 @@ export const ProductListScreen = () => {
             />
             <View style={styles.sortRow}>
               <Text style={[styles.sortLabel, { color: colors.mutedForeground }]}>Sort by:</Text>
-              <View style={styles.gridButtonInline}>
-                <TouchableOpacity
-                  style={[
-                    styles.gridToggleSmall,
-                    { backgroundColor: colors.secondary },
-                  ]}
-                  onPress={toggleGridMode}
-                  activeOpacity={0.8}
-                >
-                  <Ionicons
-                    name={gridMode === 1 ? 'list' : gridMode === 2 ? 'grid-outline' : 'grid'}
-                    size={16}
-                    color={colors.foreground}
-                  />
-                </TouchableOpacity>
-              </View>
             </View>
             <SortFilter
               selectedSort={sortBy}
@@ -815,16 +829,6 @@ const styles = StyleSheet.create({
   sortLabel: {
     fontSize: FontSize.sm,
     fontWeight: FontWeight.medium,
-  },
-  gridButtonInline: {
-    marginLeft: 'auto',
-  },
-  gridToggleSmall: {
-    borderRadius: BorderRadius.full,
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 
   listContent: {
