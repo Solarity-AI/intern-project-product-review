@@ -102,8 +102,6 @@ export const WishlistScreen = () => {
   };
 
   const handleCardLongPress = (item: WishlistItem) => {
-    if (Platform.OS === 'android') return; // Disable long-press selection on Android
-
     const id = String((item as any)?.id ?? '');
     if (!id) return;
 
@@ -154,24 +152,28 @@ export const WishlistScreen = () => {
     const id = String((item as any)?.id ?? '');
     const selected = selectedItems.has(id);
 
-    // Simplified grid layout - gap is handled by columnWrapper
     const isGrid = numColumns > 1;
+    const gapSize = Spacing.sm;
 
     return (
       <View
         style={[
-          isGrid ? styles.gridItemWrapper : styles.listItemWrapper,
+          styles.gridItemWrapper,
           isGrid && {
-            flex: 1,
-            minWidth: 0,
+            width: `${100 / numColumns}%`,
+            paddingRight: index % numColumns === numColumns - 1 ? 0 : gapSize / 2,
+            paddingLeft: index % numColumns === 0 ? 0 : gapSize / 2,
+            marginBottom: Spacing.sm,
+            flexGrow: 0,
+            flexShrink: 0,
           },
           !isGrid && {
             width: '100%',
+            marginBottom: Spacing.sm,
           },
         ]}
         collapsable={false}
       >
-
         <SelectableWishlistCard
           item={item}
           numColumns={numColumns}
@@ -344,15 +346,10 @@ export const WishlistScreen = () => {
               contentContainerStyle={[
                 styles.listContent,
                 isWeb && styles.webListContent,
-                !isWeb && { paddingHorizontal: Spacing.lg }, // Mobile padding
+                !isWeb && { paddingHorizontal: Spacing.lg },
               ]}
               columnWrapperStyle={
-                numColumns > 1
-                  ? [
-                    styles.columnWrapper,
-                    isWeb && styles.columnWrapperWeb,
-                  ]
-                  : undefined
+                numColumns > 1 ? styles.columnWrapper : undefined
               }
 
             />
@@ -476,29 +473,16 @@ const styles = StyleSheet.create({
   },
 
   columnWrapper: {
+    flexDirection: 'row',
     justifyContent: 'flex-start',
-    gap: Spacing.sm, // Item'lar arası boşluk
   },
 
-
-  columnWrapperWeb: {
-    gap: Spacing.md, // Web'de biraz daha fazla gap
-  },
-
-  // ✅ item wrapper: gap yerine padding (Android daha stabil)
   gridItemWrapper: {
-    paddingVertical: Spacing.sm / 2,
-  },
-
-
-
-  gridItemPad: {
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.sm,
+    // Styles applied inline in renderItem
   },
 
   listItemWrapper: {
-    paddingVertical: Spacing.sm,
+    paddingVertical: Spacing.sm / 2,
   },
 
   loadingContainer: {
