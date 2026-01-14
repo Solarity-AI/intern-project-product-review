@@ -1,7 +1,7 @@
 // React Native SearchBar Component
 // Cross-platform search input with history
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   TextInput,
@@ -11,8 +11,8 @@ import {
   FlatList,
   Keyboard,
   Platform,
-  Modal, // ✨ Using Modal for overlay behavior without actual Modal component issues
   Dimensions,
+  KeyboardEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Spacing, FontSize, BorderRadius, Shadow } from '../constants/theme';
@@ -37,6 +37,44 @@ export const SearchBar: React.FC<SearchBarProps> = ({
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const [layout, setLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  const wrapperRef = useRef<View>(null);
+  const [absoluteY, setAbsoluteY] = useState(0);
+
+  const updateAbsolutePosition = () => {
+    wrapperRef.current?.measureInWindow((x, y, width, height) => {
+      setAbsoluteY(y + height);
+    });
+  };
+
+  useEffect(() => {
+    if (isFocused) {
+      updateAbsolutePosition();
+    }
+  }, [isFocused]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSubscription = Keyboard.addListener(showEvent, (e: KeyboardEvent) => {
+      setKeyboardHeight(e.endCoordinates.height);
+      if (isFocused) {
+        updateAbsolutePosition();
+      }
+    });
+    const hideSubscription = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const handleFocus = () => setIsFocused(true);
   
@@ -63,13 +101,25 @@ export const SearchBar: React.FC<SearchBarProps> = ({
     Keyboard.dismiss();
   };
 
+  const handleSearchPress = () => {
+    onSearchSubmit(value);
+    setIsFocused(false);
+    Keyboard.dismiss();
+  };
+
   return (
     <View 
+      ref={wrapperRef}
       style={[styles.wrapper, { zIndex: isFocused ? 9999 : 1 }]}
-      onLayout={(event) => setLayout(event.nativeEvent.layout)}
+      onLayout={(event) => {
+        setLayout(event.nativeEvent.layout);
+        if (isFocused) updateAbsolutePosition();
+      }}
     >
       <View style={[styles.container, { backgroundColor: colors.secondary }]}>
-        <Ionicons name="search" size={18} color={colors.mutedForeground} />
+        <TouchableOpacity onPress={handleSearchPress} activeOpacity={0.7}>
+          <Ionicons name="search" size={18} color={colors.mutedForeground} />
+        </TouchableOpacity>
         <TextInput
           ref={inputRef}
           style={[styles.input, { color: colors.foreground }]}
@@ -107,7 +157,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
             activeOpacity={1} 
             onPress={closeHistory}
           />
-          <View style={[styles.historyContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <View 
+            style={[
+              styles.historyContainer, 
+              { 
+                backgroundColor: colors.card, 
+                borderColor: colors.border,
+                maxHeight: keyboardHeight > 0 
+                  ? Math.max(150, Dimensions.get('window').height - keyboardHeight - absoluteY - 40)
+                  : 350
+              }
+            ]}
+          >
             <FlatList
               data={searchHistory}
               keyExtractor={(item) => item}
@@ -136,15 +197,18 @@ export const SearchBar: React.FC<SearchBarProps> = ({
               )}
               keyboardShouldPersistTaps="always"
               ListFooterComponent={
-                <TouchableOpacity 
-                  style={[styles.clearHistoryButton, { borderTopColor: colors.border }]} 
-                  onPress={handleClearHistory}
-                >
-                  <Text style={[styles.clearHistoryText, { color: colors.destructive || '#ef4444' }]}>
-                    Clear Search History
-                  </Text>
-                </TouchableOpacity>
+                searchHistory.length > 0 ? (
+                  <TouchableOpacity 
+                    style={[styles.clearHistoryButton, { borderTopColor: colors.border }]} 
+                    onPress={handleClearHistory}
+                  >
+                    <Text style={[styles.clearHistoryText, { color: colors.destructive || '#ef4444' }]}>
+                      Clear Search History
+                    </Text>
+                  </TouchableOpacity>
+                ) : null
               }
+              ListFooterComponentStyle={{ marginBottom: Platform.OS === 'ios' ? 10 : 0 }}
             />
           </View>
         </>
@@ -167,7 +231,6 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.lg,
     gap: Spacing.sm,
-    marginHorizontal: Spacing.lg,
   },
   input: {
     flex: 1,
@@ -178,17 +241,17 @@ const styles = StyleSheet.create({
   overlay: {
     position: 'absolute',
     top: 50, // Offset for search bar height
-    left: -1000, // Cover everything
-    right: -1000,
-    bottom: -10000, // Cover everything down
+    left: -screenWidth, // Cover everything
+    right: -screenWidth,
+    bottom: -screenHeight * 1.5, // Cover everything down
     backgroundColor: 'transparent', // Invisible
     zIndex: 9998, // Just below history container
   },
   historyContainer: {
     position: 'absolute',
     top: '100%',
-    left: Spacing.lg,
-    right: Spacing.lg,
+    left: 0,
+    right: 0,
     marginTop: Spacing.xs,
     borderRadius: BorderRadius.lg,
     borderWidth: 1,

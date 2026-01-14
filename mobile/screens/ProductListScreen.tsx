@@ -45,7 +45,7 @@ export const ProductListScreen = () => {
   const route = useRoute<RouteProp<RootStackParamList, 'ProductList'>>();
   const { colors, colorScheme, toggleTheme } = useTheme();
   const { unreadCount } = useNotifications();
-  const { wishlistCount, addMultipleToWishlist } = useWishlist();
+  const { wishlistCount, addMultipleToWishlist, isInWishlist } = useWishlist();
   const { addSearchTerm } = useSearch();
   const { isConnected, isInternetReachable, checkConnection } = useNetwork();
 
@@ -68,8 +68,8 @@ export const ProductListScreen = () => {
   const lastFetchParamsRef = useRef<string>('');
   const isInitialLoadRef = useRef(true);
 
-  // Grid mode: 1 / 2 / 4
-  const [gridMode, setGridMode] = useState<1 | 2 | 4>(2);
+  // Grid mode: 1 / 2 / 3
+  const [gridMode, setGridMode] = useState<1 | 2 | 3>(2);
   const numColumns = gridMode;
   const gridTouchedRef = useRef(false);
 
@@ -77,7 +77,7 @@ export const ProductListScreen = () => {
     if (!isWeb) return;
     if (gridTouchedRef.current) return;
 
-    const next = width < 720 ? 1 : width < 1100 ? 2 : 4;
+    const next: 1 | 2 | 3 = width < 720 ? 1 : width < 1100 ? 2 : 3;
     if (gridMode !== next) setGridMode(next);
   }, [isWeb, width, gridMode]);
 
@@ -92,12 +92,13 @@ export const ProductListScreen = () => {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Search / Sort / Filter
   const [searchQuery, setSearchQuery] = useState((route.params as any)?.search ?? '');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState((route.params as any)?.search ?? '');
+  const [submittedSearchQuery, setSubmittedSearchQuery] = useState((route.params as any)?.search ?? '');
   const [selectedCategory, setSelectedCategory] = useState((route.params as any)?.category ?? 'All');
   const [sortBy, setSortBy] = useState('name,asc');
   const [sortLoaded, setSortLoaded] = useState(false);
@@ -113,32 +114,13 @@ export const ProductListScreen = () => {
     }
   }, []);
 
-  const saveSortPreference = useCallback(async (value: string) => {
-    try {
-      await AsyncStorage.setItem(SORT_STORAGE_KEY, value);
-    } catch {
-      // no-op
-    }
-  }, []);
-
   useEffect(() => {
     loadSortPreference();
   }, [loadSortPreference]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchQuery !== debouncedSearchQuery) {
-        setDebouncedSearchQuery(searchQuery);
-        if (searchQuery.trim().length > 0) addSearchTerm(searchQuery);
-      }
-    }, 500);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, debouncedSearchQuery, addSearchTerm]);
-
   const toggleGridMode = () => {
     gridTouchedRef.current = true;
-    setGridMode(prev => (prev === 1 ? 2 : prev === 2 ? 4 : 1));
+    setGridMode(prev => (prev === 1 ? 2 : prev === 2 ? 3 : 1));
   };
 
   const handleCancelSelection = () => {
@@ -147,12 +129,33 @@ export const ProductListScreen = () => {
   };
 
   const handleAddSelectedToWishlist = () => {
-    const selectedProducts = filteredProducts.filter(p => selectedItems.has(String((p as any)?.id ?? '')));
-    addMultipleToWishlist(selectedProducts as any);
-    handleCancelSelection();
+    const selectedProducts = filteredProducts.filter(p => {
+      const id = String((p as any)?.id ?? '');
+      return selectedItems.has(id) && !isInWishlist(id);
+    });
+    
+    if (selectedProducts.length === 0) {
+      handleCancelSelection();
+      return;
+    }
+
+    // Prevent UI freeze by wrapping in requestAnimationFrame
+    requestAnimationFrame(() => {
+      addMultipleToWishlist(selectedProducts.map(p => ({
+        id: String((p as any).id),
+        name: p.name,
+        price: p.price,
+        imageUrl: p.imageUrl,
+        categories: p.categories,
+        averageRating: p.averageRating,
+      })) as any);
+      handleCancelSelection();
+    });
   };
 
   const handleCardLongPress = (product: ApiProduct) => {
+    if (Platform.OS === 'android') return; // Disable long-press selection on Android
+
     const id = String((product as any)?.id ?? '');
     if (!id) return;
     setIsSelectionMode(true);
@@ -182,7 +185,7 @@ export const ProductListScreen = () => {
       if (isFetchingRef.current) return;
       if (!sortLoaded) return;
 
-      const paramsKey = `${page}-${selectedCategory}-${debouncedSearchQuery}-${sortBy}`;
+      const paramsKey = `${page}-${selectedCategory}-${submittedSearchQuery}-${sortBy}`;
       if (lastFetchParamsRef.current === paramsKey && !isInitialLoadRef.current) return;
 
       isFetchingRef.current = true;
@@ -200,14 +203,16 @@ export const ProductListScreen = () => {
           page,
           size: 20,
           category: selectedCategory === 'All' ? undefined : selectedCategory,
-          search: debouncedSearchQuery?.trim() ? debouncedSearchQuery.trim() : undefined,
+          search: submittedSearchQuery?.trim() ? submittedSearchQuery.trim() : undefined,
           sort: sortBy,
         });
 
         const items = (res as any)?.content ?? (res as any)?.items ?? [];
         const totalPagesFromApi = (res as any)?.totalPages ?? 0;
+        const totalElementsFromApi = (res as any)?.totalElements ?? 0;
 
         setTotalPages(totalPagesFromApi);
+        setTotalElements(totalElementsFromApi);
         setCurrentPage(page);
         setHasMore(page < totalPagesFromApi - 1);
         setApiProducts(prev => (append ? [...prev, ...items] : items));
@@ -220,30 +225,44 @@ export const ProductListScreen = () => {
         isInitialLoadRef.current = false;
       }
     },
-    [selectedCategory, debouncedSearchQuery, sortBy, sortLoaded, isOffline]
+    [selectedCategory, submittedSearchQuery, sortBy, sortLoaded, isOffline]
   );
 
   useEffect(() => {
     if (!sortLoaded) return;
     lastFetchParamsRef.current = '';
     fetchProducts(0, false);
-  }, [selectedCategory, debouncedSearchQuery, sortBy, sortLoaded, fetchProducts]);
+  }, [selectedCategory, submittedSearchQuery, sortBy, sortLoaded, fetchProducts]);
+
+  useEffect(() => {
+    const category = (route.params as any)?.category;
+    const search = (route.params as any)?.search;
+    if (category) setSelectedCategory(category);
+    if (search !== undefined) {
+      setSearchQuery(search);
+      setSubmittedSearchQuery(search);
+    }
+  }, [route.params]);
 
   const loadMoreProducts = () => {
     if (loadingMore || loading || !hasMore) return;
     fetchProducts(currentPage + 1, true);
   };
 
-  const stats = useMemo(() => ({ productCount: apiProducts.length }), [apiProducts.length]);
+  const stats = useMemo(() => ({ productCount: totalElements }), [totalElements]);
 
   const handleSearchSubmit = (search: string) => {
+    if (search.trim().length > 0) {
+      addSearchTerm(search);
+    }
+    setSubmittedSearchQuery(search);
     if (Platform.OS === 'web') navigation.setParams({ search } as any);
   };
 
   const handleReset = () => {
     lastFetchParamsRef.current = '';
     setSearchQuery('');
-    setDebouncedSearchQuery('');
+    setSubmittedSearchQuery('');
     setSelectedCategory('All');
     setSortBy('name,asc');
     if (Platform.OS === 'web') navigation.setParams({ category: 'All', search: '' } as any);
@@ -377,6 +396,14 @@ export const ProductListScreen = () => {
     }, [])
   );
 
+  const newToWishlistCount = useMemo(() => {
+    let count = 0;
+    selectedItems.forEach(id => {
+      if (!isInWishlist(id)) count++;
+    });
+    return count;
+  }, [selectedItems, isInWishlist]);
+
   return (
     <ScreenWrapper>
       <TouchableWithoutFeedback
@@ -417,26 +444,58 @@ export const ProductListScreen = () => {
                 </TouchableOpacity>
               )}
             </View>
+          ) : filteredProducts.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <View style={[styles.emptyIcon, { backgroundColor: colors.muted }]}>
+                <Ionicons name="search-outline" size={44} color={colors.mutedForeground} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No products found</Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                Try adjusting your search or filters to find what you're looking for.
+              </Text>
+              <TouchableOpacity
+                style={[styles.emptyButton, { backgroundColor: colors.primary }]}
+                onPress={handleReset}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.emptyButtonText, { color: colors.primaryForeground }]}>Clear all filters</Text>
+              </TouchableOpacity>
+            </View>
           ) : (
             <FlatList
               data={filteredProducts}
               key={numColumns}
               numColumns={numColumns}
               columnWrapperStyle={numColumns > 1 ? styles.columnWrap : undefined}
-
+              removeClippedSubviews={false}
               keyExtractor={(item: any) => String(item?.id ?? '')}
               contentContainerStyle={[
                 styles.listContent,
                 isWeb && styles.webListContent,
                 isWeb && { maxWidth: containerMaxWidth },
+                !isWeb && { paddingHorizontal: Spacing.lg }, // Mobile padding
               ]}
+              columnWrapperStyle={
+                numColumns > 1
+                  ? [
+                    styles.columnWrap,
+                    { justifyContent: 'flex-start' }, // Space-between yerine start
+                  ]
+                  : undefined
+              }
               renderItem={({ item }) => (
                 <View
                   style={[
                     numColumns > 1 && styles.gridItem,
-                    numColumns > 1 && { flex: 1, minWidth: 0 },
-                    numColumns === 1 && { paddingHorizontal: Spacing.lg },
+                    numColumns > 1 && {
+                      flex: 1,
+                      minWidth: 0,
+                    },
+                    numColumns === 1 && { 
+                      width: '100%',
+                    },
                   ]}
+                  collapsable={false}
                 >
                   <SelectableProductCard
                     product={item}
@@ -451,6 +510,9 @@ export const ProductListScreen = () => {
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
               keyboardDismissMode="on-drag"
+              maxToRenderPerBatch={Platform.OS === 'android' ? 10 : 15}
+              updateCellsBatchingPeriod={Platform.OS === 'android' ? 50 : 30}
+              initialNumToRender={10}
               ListFooterComponent={
                 filteredProducts.length > 0 ? (
                   <View style={[styles.footerWrap, isWeb && styles.footerWrapWeb, isWeb && { maxWidth: containerMaxWidth }]}>
@@ -467,7 +529,7 @@ export const ProductListScreen = () => {
               }
               onEndReachedThreshold={0.4}
               onEndReached={() => {
-                if (hasMore) loadMoreProducts();
+                if (hasMore && !loadingMore) loadMoreProducts();
               }}
             />
           )}
@@ -475,13 +537,20 @@ export const ProductListScreen = () => {
           {isSelectionMode && selectedItems.size > 0 && (
             <View style={[styles.floatingBar, { backgroundColor: colors.card }]}>
               <TouchableOpacity
-                style={[styles.floatingButton, { backgroundColor: colors.primary }]}
+                style={[
+                  styles.floatingButton, 
+                  { backgroundColor: newToWishlistCount > 0 ? colors.primary : colors.muted }
+                ]}
                 onPress={handleAddSelectedToWishlist}
                 activeOpacity={0.85}
+                disabled={newToWishlistCount === 0}
               >
                 <Ionicons name="heart" size={18} color="#fff" />
                 <Text style={[styles.floatingButtonText, { color: '#fff' }]}>
-                  Add to Wishlist ({selectedItems.size})
+                  {newToWishlistCount > 0 
+                    ? `Add to Wishlist (${newToWishlistCount})`
+                    : 'Already in Wishlist'
+                  }
                 </Text>
               </TouchableOpacity>
             </View>
@@ -629,17 +698,17 @@ const styles = StyleSheet.create({
 
   // ✅ SearchBar daha “orantılı”: biraz daha yüksek + full-width container
   searchSection: {
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.md,
     zIndex: 9999,
     elevation: 20,
+    paddingHorizontal: Spacing.lg,
   },
   searchSectionWeb: {
     width: '100%',
     alignSelf: 'center',
     paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.sm,
-    paddingBottom: Spacing.md,
-    transform: [{ scale: 1.06 }],
+    paddingTop: Spacing.xs,
+    paddingBottom: Spacing.sm,
   },
 
   listContent: {
@@ -655,7 +724,7 @@ const styles = StyleSheet.create({
 
   gridItem: {
     flex: 1,
-    minWidth: 0,
+    minWidth: Platform.OS !== 'android' ? 0 : undefined,
     marginBottom: Spacing.lg,
   },
 
@@ -723,9 +792,47 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
   },
   columnWrap: {
-    paddingHorizontal: Spacing.lg,
-    justifyContent: 'space-between',
-    columnGap: Spacing.lg, // RN web + yeni RN sürümlerinde çalışır
+    paddingHorizontal: 0,
+    justifyContent: 'flex-start',
+    columnGap: Platform.OS === 'android' ? Spacing.md : Spacing.lg,
+    gap: Platform.OS === 'android' ? Spacing.md : Spacing.lg,
   },
-
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing['2xl'],
+    marginTop: Spacing['5xl'],
+  },
+  emptyIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: FontSize.lg,
+    fontWeight: FontWeight.bold,
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  emptySubtitle: {
+    fontSize: FontSize.base,
+    textAlign: 'center',
+    marginBottom: Spacing['2xl'],
+    paddingHorizontal: Spacing.xl,
+  },
+  emptyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: Spacing.xl,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.full,
+  },
+  emptyButtonText: {
+    fontSize: FontSize.base,
+    fontWeight: FontWeight.semibold,
+  },
 });
