@@ -6,19 +6,19 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Linking from 'expo-linking';
 
-import { ProductListScreen } from './screens/ProductListScreen';
-import { ProductDetailsScreen } from './screens/ProductDetailsScreen';
-import { NotificationsScreen } from './screens/NotificationsScreen';
-import { NotificationDetailScreen } from './screens/NotificationDetailScreen';
-import { WishlistScreen } from './screens/WishlistScreen';
-import { AIAssistantScreen } from './screens/AIAssistantScreen';
-import { NotificationProvider } from './context/NotificationContext';
-import { WishlistProvider } from './context/WishlistContext';
-import { SearchProvider } from './context/SearchContext';
-import { ToastProvider } from './context/ToastContext';
-import { ThemeProvider, useTheme } from './context/ThemeContext';
-import { NetworkProvider } from './context/NetworkContext';
-import { RootStackParamList } from './types';
+import { ProductListScreen } from './src/screens/ProductListScreen';
+import { ProductDetailsScreen } from './src/screens/ProductDetailsScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
+import { NotificationDetailScreen } from './src/screens/NotificationDetailScreen';
+import { WishlistScreen } from './src/screens/WishlistScreen';
+import { AIAssistantScreen } from './src/screens/AIAssistantScreen';
+import { NotificationProvider } from './src/context/NotificationContext';
+import { WishlistProvider } from './src/context/WishlistContext';
+import { SearchProvider } from './src/context/SearchContext';
+import { ToastProvider } from './src/context/ToastContext';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
+import { NetworkProvider } from './src/context/NetworkContext';
+import { RootStackParamList } from './src/types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 

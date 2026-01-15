@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 //const BASE_URL = "http://192.168.1.6:8080";
 
 //EREN LOCAL URL
-const BASE_URL = "http://10.3.137.113:8080";
+const BASE_URL = "http://10.2.150.211:8080";
 
 const USER_ID_KEY = 'device_user_id';
 
