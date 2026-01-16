@@ -93,7 +93,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
     >
       <View style={[
         styles.imageContainer,
-        numColumns === 4 && styles.imageContainerCompact,
+        numColumns >= 3 && styles.imageContainerCompact,
         // ✨ iOS Single Column: Larger Image
         (Platform.OS === 'ios' && numColumns === 1) && styles.imageContainerLarge
       ]}>
@@ -101,23 +101,31 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
 
         {showWishlistButton && (
           <TouchableOpacity
-            style={[styles.wishlistButton, { backgroundColor: wishlistButtonBg, zIndex: 2 }]}
+            style={[
+              styles.wishlistButton, 
+              { backgroundColor: wishlistButtonBg, zIndex: 2 },
+              numColumns >= 3 && styles.wishlistButtonCompact
+            ]}
             onPress={handleWishlistToggle}
             activeOpacity={0.8}
           >
             <Ionicons
               name={inWishlist ? 'heart' : 'heart-outline'}
-              size={20}
+              size={numColumns >= 3 ? 16 : 20}
               color={wishlistIconColor}
             />
           </TouchableOpacity>
         )}
 
-        <View style={[styles.categoryBadge, { backgroundColor: colors.secondary }]}>
+        <View style={[
+          styles.categoryBadge, 
+          { backgroundColor: colors.secondary },
+          numColumns >= 3 && styles.categoryBadgeCompact
+        ]}>
           <Text style={[
             styles.categoryText, 
             { color: colors.foreground },
-            numColumns === 4 && styles.categoryTextCompact
+            numColumns >= 3 && styles.categoryTextCompact
           ]}>
             {displayCategory}
           </Text>
@@ -126,22 +134,22 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
 
       <View style={[
         styles.content,
-        numColumns === 4 && styles.contentCompact
+        numColumns >= 3 && styles.contentCompact
       ]}>
         <Text numberOfLines={1} style={[
           styles.name, 
           { color: colors.foreground },
-          numColumns === 4 && styles.nameCompact
+          numColumns >= 3 && styles.nameCompact
         ]}>
           {product.name ?? 'Product'}
         </Text>
 
-        <View style={styles.ratingRow}>
-          <StarRating rating={avgRating} size="sm" compact={numColumns === 4} />
+        <View style={[styles.ratingRow, numColumns >= 3 && styles.ratingRowCompact]}>
+          <StarRating rating={avgRating} size="sm" compact={numColumns >= 3} />
           <Text style={[
             styles.reviewCount, 
             { color: colors.mutedForeground },
-            numColumns === 4 && styles.reviewCountCompact
+            numColumns >= 3 && styles.reviewCountCompact
           ]}>
             ({reviewCount})
           </Text>
@@ -150,7 +158,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, numColumns = 
         <Text style={[
           styles.price, 
           { color: colors.foreground },
-          numColumns === 4 && styles.priceCompact
+          numColumns >= 3 && styles.priceCompact
         ]}>
           {`$${product.price.toFixed(2)}`}
         </Text>
@@ -199,6 +207,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     ...Shadow.soft,
   },
+  wishlistButtonCompact: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    top: Spacing.sm,
+    right: Spacing.sm,
+  },
 
   categoryBadge: {
     position: 'absolute',
@@ -211,13 +226,19 @@ const styles = StyleSheet.create({
     ...Shadow.soft,
     zIndex: 1,
   },
+  categoryBadgeCompact: {
+    top: Spacing.sm,
+    left: Spacing.sm,
+    paddingHorizontal: Spacing.xs,
+    paddingVertical: 2,
+  },
 
   categoryText: {
     fontSize: 12,
     fontWeight: FontWeight.medium,
   },
   categoryTextCompact: {
-    fontSize: 10,
+    fontSize: 9,
   },
 
   content: {
@@ -225,8 +246,9 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   contentCompact: {
-    padding: Spacing.sm,
-    gap: 4,
+    padding: Spacing.xs,
+    paddingHorizontal: Spacing.sm,
+    gap: 2,
   },
 
   name: {
@@ -234,7 +256,7 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
   },
   nameCompact: {
-    fontSize: 11,
+    fontSize: 10,
   },
 
   ratingRow: {
@@ -242,12 +264,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  ratingRowCompact: {
+    gap: 2,
+  },
 
   reviewCount: {
     fontSize: 12,
   },
   reviewCountCompact: {
-    fontSize: 10,
+    fontSize: 9,
   },
 
   price: {
@@ -255,6 +280,6 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.semibold,
   },
   priceCompact: {
-    fontSize: 12,
+    fontSize: 11,
   },
 });

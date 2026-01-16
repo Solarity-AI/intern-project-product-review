@@ -59,8 +59,8 @@ export const ProductListScreen = () => {
   const containerMaxWidth =
     !isWeb ? undefined : webBp === 'wide' ? 1200 : webBp === 'medium' ? 1040 : 900;
 
-  const headerIconSize = isWeb ? 22 : 20;
-  const headerIconSizeBig = isWeb ? 24 : 22;
+  const headerIconSize = isWeb ? 20 : 18;
+  const headerIconSizeBig = isWeb ? 22 : 20;
 
   // Offline
   const isOffline = !isConnected || isInternetReachable === false;
@@ -622,15 +622,22 @@ export const ProductListScreen = () => {
                   <ActivityIndicator size="large" color={colors.primary} />
                   <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>Loading products...</Text>
                 </View>
-              ) : error ? (
+              ) : error && !isOffline ? (
+                // Only show error if NOT offline (offline banner handles that case)
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle-outline" size={24} color={colors.destructive} />
                   <Text style={{ color: colors.destructive, marginLeft: Spacing.sm, flex: 1 }}>{error}</Text>
-                  {isOffline && (
-                    <TouchableOpacity onPress={handleRetry} style={styles.retryTextButton}>
-                      <Text style={{ color: colors.primary, fontWeight: FontWeight.semibold }}>Retry</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity onPress={handleRetry} style={styles.retryTextButton}>
+                    <Text style={{ color: colors.primary, fontWeight: FontWeight.semibold }}>Retry</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : isOffline ? (
+                // Offline: show minimal message, banner handles the rest
+                <View style={styles.offlineContainer}>
+                  <Ionicons name="cloud-offline-outline" size={48} color={colors.mutedForeground} />
+                  <Text style={[styles.offlineText, { color: colors.mutedForeground }]}>
+                    Waiting for connection...
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.emptyContainer}>
@@ -779,31 +786,31 @@ const styles = StyleSheet.create({
 
   themeButton: {
     borderRadius: BorderRadius.full,
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   gridButton: {
     borderRadius: BorderRadius.full,
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   notificationButton: {
     borderRadius: BorderRadius.full,
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   headerIconButtonWeb: {
-    width: 46,
-    height: 46,
+    width: 40,
+    height: 40,
   },
 
   badge: {
@@ -994,6 +1001,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-start',
   },
+  
+  // ✅ Offline state (minimal - banner handles the main message)
+  offlineContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: Spacing['2xl'],
+    marginTop: Spacing['3xl'],
+  },
+  offlineText: {
+    fontSize: FontSize.base,
+    marginTop: Spacing.md,
+    textAlign: 'center',
+  },
+  
   emptyContainer: {
     flex: 1,
     alignItems: 'center',

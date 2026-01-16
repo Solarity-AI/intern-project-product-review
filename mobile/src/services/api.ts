@@ -6,7 +6,7 @@ const BASE_URL = "https://product-review-app-solarityai-a391ad53d79a.herokuapp.c
 //const BASE_URL = "http://192.168.1.6:8080";
 
 
-//const BASE_URL = "http://10.11.90.214:8080"; //EREN LOCAL URL
+// const BASE_URL = "http://10.3.137.113:8080"; //EREN LOCAL URL
 
 const USER_ID_KEY = 'device_user_id';
 
@@ -177,6 +177,20 @@ export function chatWithAI(productId: number | string, question: string) {
 
 export function getWishlist() {
   return request<number[]>(`${BASE_URL}/api/user/wishlist`);
+}
+
+// ✨ Get full product details for wishlist items
+export async function getWishlistProducts(): Promise<ApiProduct[]> {
+  const productIds = await getWishlist();
+  if (!productIds || productIds.length === 0) return [];
+  
+  // Fetch each product's details in parallel
+  const products = await Promise.all(
+    productIds.map(id => getProduct(id).catch(() => null))
+  );
+  
+  // Filter out any failed fetches
+  return products.filter((p): p is ApiProduct => p !== null);
 }
 
 export function toggleWishlistApi(productId: number) {

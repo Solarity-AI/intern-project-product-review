@@ -40,7 +40,7 @@ export const LoadMoreCard: React.FC<LoadMoreCardProps> = ({
         ]}
       >
         <View style={[styles.endIconContainer, { backgroundColor: colors.muted }]}>
-          <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+          <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
         </View>
 
         <Text style={[styles.endText, { color: colors.mutedForeground }]}>
@@ -143,30 +143,30 @@ const styles = StyleSheet.create({
     fontWeight: FontWeight.medium,
   },
 
-  // End state styles
+  // End state styles - compact
   endIconContainer: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: BorderRadius.full,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.xs,
   },
 
   endText: {
-    fontSize: FontSize.base,
+    fontSize: FontSize.sm,
     fontWeight: FontWeight.semibold,
     textAlign: 'center',
   },
   endContainer: {
-    paddingVertical: Spacing.lg,
-    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
     alignItems: 'center',
   },
   endSubtext: {
     fontSize: FontSize.xs,
     fontWeight: FontWeight.medium,
     textAlign: 'center',
-    marginTop: Spacing.xs,
+    marginTop: 2,
   },
 });
