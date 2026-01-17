@@ -1,129 +1,120 @@
-# 📱 Product Review Application
+# 📱 Product Review Full-Stack Application
 
-**Backend:** Spring Boot (Java)
-**Frontend:** React Native (Expo) - *Reference Implementation*
-**Database:** H2 (Dev) / PostgreSQL (Prod)
-**Deployment:** Heroku (Backend) & Vercel (Web)
+Welcome to the **Product Review Application**! This project is a comprehensive full-stack ecosystem designed to demonstrate modern software architecture, clean code principles, and seamless cross-platform integration.
 
----
-
-## 📌 Project Overview
-
-The **Product Review Application** is a full-stack system designed to demonstrate modern software architecture patterns. It allows users to browse products, filter by categories, view detailed reviews with AI-generated summaries, and submit their own feedback.
-
-The project emphasizes **clean architecture, REST API design, performance optimization (pagination, server-side filtering), and cross-platform development**.
+The system allows users to explore products, manage wishlists, interact with an AI Assistant for review analysis, and submit real-time feedback.
 
 ---
 
-## 🎓 For Future Interns
+## 🚀 Quick Start (Onboarding Guide)
 
-**Assignment:** You must choose and implement **only one** of the following frontend stacks:
+Follow these steps to get the entire environment running on your local machine from scratch.
 
-1. **iOS (Swift):** See [mobile/README-iOS-Swift.md](./mobile/README-iOS-Swift.md) for requirements.
-2. **Android (Kotlin):** See [mobile/README-Android-Kotlin.md](./mobile/README-Android-Kotlin.md) for requirements.
+### 1. Prerequisites
+Ensure you have the following installed:
+*   **Java JDK 17+**
+*   **Node.js 20+** & **npm**
+*   **Git**
+*   **Android Studio / Xcode** (for mobile emulation) or **Expo Go** on a physical device.
 
-> **Note:** The current `mobile/` folder contains a **React Native** implementation. This serves as a **reference** for how the UI should look and how to consume the Backend API. You are expected to build a native version (Swift or Kotlin) matching these features.
-
----
-
-## 🏗️ System Architecture
-
-The system follows a layered architecture:
-
-1. **Presentation Layer:** Mobile/Web App (React Native, Swift, or Kotlin)
-2. **API Layer:** Spring Boot REST Controllers
-3. **Business Layer:** Service Interfaces & Implementations
-4. **Data Layer:** JPA Repositories & Database
-
----
-
-## 🧩 Key Features Implemented
-
-### 🛒 Product Management
-
-* **Server-Side Pagination:** Efficiently loads data in chunks.
-* **Dynamic Filtering:** Filter products by category and reviews by rating.
-* **Rating Breakdown:** Server-calculated distribution of star ratings.
-
-### 🤖 AI Integration
-
-* **AI Review Summary:** Automatically generates a summary of user reviews using AI logic.
-* **AI Assistant:** Interactive chat interface for product queries.
-
-### 🛠️ Technical Highlights
-
-* **Dependency Inversion:** Controllers depend on Interfaces, not concrete classes.
-* **DTO Pattern:** Strict separation between Database Entities and API responses.
-* **Optimized SQL:** Custom queries for aggregation and performance.
-
----
-
-## 🚀 Future Improvements & Technical Roadmap
-
-### 1. Security Enhancements (Planned)
-
-* **Spring Security Integration:** Integrate Spring Security 6.
-* **JWT Authentication:** Implement stateless authentication using JSON Web Tokens.
-* **Role-Based Access Control (RBAC):** Differentiate between Admin and User roles.
-* **Secure Endpoints:** Protect sensitive actions like `POST /reviews`.
-
-### 2. Validation with AOP (Planned)
-
-* **Centralized Validation:** Use Aspect-Oriented Programming (AOP) to handle request validation globally.
-* **Consistent Error Handling:** Unified error response structure across all endpoints.
-* **Reusable Aspects:** Create custom annotations for business rules.
-
-### 3. Integration Testing (Planned)
-
-* **Testcontainers:** Use Docker containers to spin up real database instances for testing.
-* **Reproducible Tests:** Ensure tests run consistently across different environments (CI/CD, Local).
-* **End-to-End Testing:** Validate full user flows from API to Database.
-
----
-
-## 🛠️ How to Run Locally
-
-### Backend
-
+### 2. Backend Setup
 ```bash
 cd backend
+./mvnw clean install
 ./mvnw spring-boot:run
 ```
+*   **API Base URL:** `http://localhost:8080`
+*   **H2 Console:** `http://localhost:8080/h2-console` (User: `sa`, Password: [empty])
 
-See [backend/README-SpringBoot.md](./backend/README-SpringBoot.md) for more details.
-
-### Frontend (Reference Implementation - React Native)
-
+### 3. Frontend Setup (React Native / Expo)
 ```bash
 cd mobile
 npm install
 npx expo start
 ```
+*   Press **'w'** for Web version.
+*   Press **'a'** for Android Emulator.
+*   Scan the QR code with **Expo Go** for physical device testing.
 
-* Press `w` for Web
-* Press `a` for Android (Emulator)
-* Scan QR code for iOS (Expo Go)
+---
+
+## 🏗️ Technical Architecture
+
+The project follows a **Layered Clean Architecture** to ensure maintainability and testability.
+
+### Backend (Spring Boot)
+*   **Controller Layer:** REST API design with versioning and DTO mapping.
+*   **Service Layer:** Business logic encapsulation with Dependency Inversion.
+*   **Data Layer:** Spring Data JPA with optimized SQL queries for filtering and aggregation.
+*   **Security:** (Planned) JWT-based authentication and RBAC.
+
+### Frontend (React Native & Web)
+*   **State Management:** React Context API for Wishlist, Search, and Notifications.
+*   **Responsive Design:** Adaptive layouts for Mobile (Android/iOS) and Web (Vercel).
+*   **Networking:** Centralized API service with race-condition protection and abort controllers.
+
+---
+
+## 🧩 Key Features & Recent Improvements
+
+### 🛒 Advanced Product Management
+*   **Server-Side Pagination:** Efficiently handles large datasets for both main product list and user wishlist.
+*   **Dynamic Multi-Filter:** Search by name and filter by category simultaneously at the database level.
+*   **Global Statistics:** Real-time dashboard showing total reviews and average ratings across the platform.
+
+### 🤖 AI-Powered Insights
+*   **AI Assistant:** Interactive chat interface to ask specific questions about product reviews.
+*   **AI Summary:** Automated sentiment analysis and summary of user feedback.
+
+### 👤 User Experience (UX)
+*   **Search History:** Persistent search overlay for quick access to previous queries.
+*   **Multi-Select Wishlist:** Batch actions for managing favorite products.
+*   **Auto-Refresh:** Real-time UI updates immediately after submitting a review without manual reload.
+*   **Dark Mode:** System-wide theme support with persistent user preference.
 
 ---
 
 ## 📂 Project Structure
 
-* **/backend:** Spring Boot application source code.
-* **/mobile:** React Native (Expo) application source code (Reference).
-* **mobile/README-iOS-Swift.md:** Instructions for iOS implementation option.
-* **mobile/README-Android-Kotlin.md:** Instructions for Android implementation option.
+```text
+.
+├── backend/                # Java Spring Boot Source Code
+│   ├── src/main/java/      # Business logic & API Controllers
+│   └── README.md           # Detailed Backend Documentation
+├── mobile/                 # React Native (Expo) Source Code
+│   ├── src/components/     # Reusable UI Components
+│   ├── src/screens/        # Screen-level Components
+│   ├── src/context/        # Global State Management
+│   └── vercel.json         # Web Deployment Configuration
+└── README.md               # Main Project Entry Point
+```
 
 ---
 
-## 📦 Deliverables
+## 🌐 Deployment
 
-The final submission must include the following items:
+*   **Backend:** Hosted on **Heroku** (Eco/Basic Dynos).
+*   **Web Frontend:** Hosted on **Vercel** (SPA Routing enabled).
+*   **Mobile App:** Distributed via **EAS Build (APK)** with **OTA Updates** support.
 
-1. **System Architecture:** An [Excalidraw link] explaining the overall system design.
-2. **Frontend Code Walkthrough:** A 3–5 minute demo video [Google Drive Link] explaining the frontend codebase.
-3. **Backend Code Walkthrough:** A 3–5 minute demo video [Google Drive Link] explaining the backend architecture.
-4. **Application Demo:** A 3–5 minute video [Google Drive Link] showcasing all features on an emulator or real device.
-5. **Build Artifacts:** A [Google Drive Link] to download the generated APK (Android) or IPA (iOS).
-6. **Web Access:** A public web application link (e.g., Vercel) for testing in a browser.
-7. **Future Improvements:** A section describing potential enhancements (see Roadmap below).
-8. **Final Presentation:** A slide deck summarizing the project and learnings.
+---
+
+## 🎓 Internship Assignment
+
+Future interns are expected to:
+1.  Understand the **Backend API** provided in this repository.
+2.  Implement a **Native Frontend** (iOS/Swift or Android/Kotlin) that matches the features of the React Native reference implementation.
+3.  Refer to `mobile/README-iOS-Swift.md` or `mobile/README-Android-Kotlin.md` for specific requirements.
+
+---
+
+## 🛠️ Troubleshooting
+
+*   **Port 8080 Conflict:** If the backend fails to start, check if another process is using port 8080.
+*   **Network Issues:** Ensure the `BASE_URL` in `mobile/src/services/api.ts` matches your backend IP (use local IP for physical devices).
+*   **Vercel 404 on Refresh:** Fixed via `vercel.json` rewrites. If issues persist, ensure the file is in the `mobile/` root.
+
+---
+
+**Maintained by:** @MehmetBegun & Engineering Team
+**Last Updated:** January 2026
